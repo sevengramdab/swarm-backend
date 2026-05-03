@@ -11,7 +11,7 @@ LMSTUDIO_URL = os.environ.get("LMSTUDIO_URL", "http://127.0.0.1:1234")
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
-LOCAL_MODEL = os.environ.get("LOCAL_MODEL", "qwen2.5-coder")
+LOCAL_MODEL = os.environ.get("LOCAL_MODEL", "qwen2.5-coder:1.5b")
 CLOUD_MODEL = os.environ.get("CLOUD_MODEL", "gemini-2.0-flash")
 
 MAX_AGENTS = int(os.environ.get("MAX_AGENTS", "5"))
