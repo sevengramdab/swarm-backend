@@ -128,3 +128,43 @@ async def workspace_summary(path: str = Query(...)):
     """Generate a summary of the workspace — delegated to extension."""
     # The extension calls this after scanning the workspace
     return {"path": path, "summary": "Workspace summary placeholder"}
+
+
+@router.get("/agents")
+async def list_agents():
+    """List available specialized agents."""
+    return {
+        "code": {"name": "Code", "role": "Generate, refactor, and debug code"},
+        "review": {"name": "Review", "role": "Review code for bugs, security, and style"},
+        "test": {"name": "Test", "role": "Write tests and check coverage"},
+        "doc": {"name": "Doc", "role": "Write documentation and READMEs"},
+        "plan": {"name": "Plan", "role": "Architect and plan features"},
+    }
+
+
+# Legacy compatibility endpoints for OrbitScribe HTML
+@router.post("/chat/stream")
+async def chat_stream(req: ChatRequest):
+    """Streaming chat — alias for /chat."""
+    return await chat(req)
+
+
+@router.post("/swarm")
+async def swarm(req: ChatRequest):
+    """Run the multi-agent swarm on a task."""
+    req.mode = "swarm"
+    return await chat(req)
+
+
+@router.post("/plan")
+async def plan_endpoint(req: ChatRequest):
+    """Generate an implementation plan."""
+    req.mode = "plan"
+    return await chat(req)
+
+
+@router.post("/agent")
+async def agent_endpoint(req: ChatRequest):
+    """Run a specific agent."""
+    req.mode = "agent"
+    return await chat(req)
