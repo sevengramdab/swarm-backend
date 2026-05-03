@@ -1,44 +1,18 @@
 """Swarm backend configuration with API lockout modes."""
 
 import os
-from enum import Enum
-from pydantic_settings import BaseSettings
 
+API_MODE = os.environ.get("SWARM_API_MODE", "hybrid").lower()
+HOST = os.environ.get("SWARM_HOST", "127.0.0.1")
+PORT = int(os.environ.get("SWARM_PORT", "58081"))
 
-class APIMode(str, Enum):
-    LOCAL_ONLY = "local_only"      # Ollama / LM Studio only
-    CLOUD_ONLY = "cloud_only"      # Gemini / OpenAI / Anthropic only
-    HYBRID = "hybrid"              # Use both, local preferred
-    AUTO = "auto"                  # Auto-detect what's available
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
+LMSTUDIO_URL = os.environ.get("LMSTUDIO_URL", "http://127.0.0.1:1234")
 
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
-class Settings(BaseSettings):
-    # API lockout mode
-    api_mode: APIMode = APIMode.AUTO
-    
-    # Server
-    host: str = "127.0.0.1"
-    port: int = 58081
-    
-    # Local LLM endpoints
-    ollama_url: str = "http://localhost:11434"
-    lm_studio_url: str = "http://localhost:1234"
-    
-    # Cloud API keys (read from env)
-    gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
-    openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
-    anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "")
-    
-    # Default models
-    local_model: str = "llama3.2"       # Ollama default
-    cloud_model: str = "gemini-1.5-flash"
-    
-    # Swarm settings
-    max_agents: int = 5
-    swarm_timeout: int = 120
-    
-    class Config:
-        env_file = ".env"
+LOCAL_MODEL = os.environ.get("LOCAL_MODEL", "qwen2.5-coder")
+CLOUD_MODEL = os.environ.get("CLOUD_MODEL", "gemini-2.0-flash")
 
-
-settings = Settings()
+MAX_AGENTS = int(os.environ.get("MAX_AGENTS", "5"))
+SWARM_TIMEOUT = int(os.environ.get("SWARM_TIMEOUT", "120"))

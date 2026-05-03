@@ -6,7 +6,7 @@ from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from core.config import settings, APIMode
+from core import config as cfg
 from core.model_router import discover_local_models, discover_cloud_models, select_model
 from modes.ask_mode import ask
 from modes.plan_mode import plan, execute_step
@@ -32,7 +32,7 @@ class SettingsUpdate(BaseModel):
 
 @router.get("/health")
 async def health():
-    return {"status": "ok", "api_mode": settings.api_mode.value}
+    return {"status": "ok", "api_mode": cfg.API_MODE}
 
 
 @router.get("/models")
@@ -41,33 +41,33 @@ async def list_models():
     local = await discover_local_models()
     cloud = await discover_cloud_models()
     
-    if settings.api_mode == APIMode.LOCAL_ONLY:
-        return {"models": local, "mode": settings.api_mode.value}
-    elif settings.api_mode == APIMode.CLOUD_ONLY:
-        return {"models": cloud, "mode": settings.api_mode.value}
+    if cfg.API_MODE == "local-only":
+        return {"models": local, "mode": cfg.API_MODE}
+    elif cfg.API_MODE == "cloud-only":
+        return {"models": cloud, "mode": cfg.API_MODE}
     else:
-        return {"models": local + cloud, "mode": settings.api_mode.value, "local": local, "cloud": cloud}
+        return {"models": local + cloud, "mode": cfg.API_MODE, "local": local, "cloud": cloud}
 
 
 @router.get("/settings")
 async def get_settings():
     return {
-        "api_mode": settings.api_mode.value,
-        "local_model": settings.local_model,
-        "cloud_model": settings.cloud_model,
-        "ollama_url": settings.ollama_url,
-        "lm_studio_url": settings.lm_studio_url,
+        "api_mode": cfg.API_MODE,
+        "local_model": cfg.LOCAL_MODEL,
+        "cloud_model": cfg.CLOUD_MODEL,
+        "ollama_url": cfg.OLLAMA_URL,
+        "lm_studio_url": cfg.LMSTUDIO_URL,
     }
 
 
 @router.post("/settings")
 async def update_settings(update: SettingsUpdate):
     if update.api_mode:
-        settings.api_mode = APIMode(update.api_mode)
+        cfg.API_MODE = update.api_mode
     if update.local_model:
-        settings.local_model = update.local_model
+        cfg.LOCAL_MODEL = update.local_model
     if update.cloud_model:
-        settings.cloud_model = update.cloud_model
+        cfg.CLOUD_MODEL = update.cloud_model
     return {"ok": True, "settings": await get_settings()}
 
 

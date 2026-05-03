@@ -2,13 +2,13 @@
 Model Router — routes requests to local or cloud LLMs based on API mode lockout.
 """
 import os
-from typing import Optional
+from typing import Optional, AsyncGenerator
 
-API_MODE = os.environ.get("SWARM_API_MODE", "hybrid").lower()
+from . import config
 
 class ModelRouter:
     def __init__(self):
-        self.mode = API_MODE  # local-only | cloud-only | hybrid
+        self.mode = config.API_MODE  # local-only | cloud-only | hybrid
 
     async def chat(self, messages: list, mode: str = "ask") -> str:
         if self.mode == "local-only":
@@ -19,7 +19,6 @@ class ModelRouter:
             return await self._hybrid_chat(messages, mode)
 
     async def _local_chat(self, messages: list) -> str:
-        # Try Ollama first, then LM Studio
         try:
             return await self._ollama_chat(messages)
         except Exception:
@@ -29,7 +28,6 @@ class ModelRouter:
                 return f"[Local LLM Error] {str(e)} — check Ollama or LM Studio."
 
     async def _cloud_chat(self, messages: list) -> str:
-        # Try Gemini, then Copilot
         try:
             return await self._gemini_chat(messages)
         except Exception:
@@ -39,8 +37,6 @@ class ModelRouter:
                 return f"[Cloud API Error] {str(e)} — check API keys."
 
     async def _hybrid_chat(self, messages: list, mode: str) -> str:
-        # For swarm/plan: prefer cloud for complex tasks
-        # For ask/agent: prefer local for speed
         if mode in ("swarm", "plan"):
             try:
                 return await self._gemini_chat(messages)
@@ -56,8 +52,8 @@ class ModelRouter:
         import aiohttp
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                "http://127.0.0.1:11434/api/chat",
-                json={"model": "qwen2.5-coder", "messages": messages, "stream": False}
+                f"{config.OLLAMA_URL}/api/chat",
+                json={"model": config.LOCAL_MODEL, "messages": messages, "stream": False}
             ) as resp:
                 data = await resp.json()
                 return data.get("message", {}).get("content", "")
@@ -66,7 +62,7 @@ class ModelRouter:
         import aiohttp
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                "http://127.0.0.1:1234/v1/chat/completions",
+                f"{config.LMSTUDIO_URL}/v1/chat/completions",
                 json={"model": "local-model", "messages": messages, "stream": False}
             ) as resp:
                 data = await resp.json()
@@ -74,24 +70,102 @@ class ModelRouter:
 
     async def _gemini_chat(self, messages: list) -> str:
         import aiohttp
-        key = os.environ.get("GEMINI_API_KEY", "")
+        key = config.GEMINI_API_KEY
         if not key:
             raise RuntimeError("GEMINI_API_KEY not set")
-        # Convert to Gemini format
         contents = []
         for m in messages:
             role = "user" if m["role"] == "user" else "model"
             contents.append({"role": role, "parts": [{"text": m["content"]}]})
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={key}",
+                f"https://generativelanguage.googleapis.com/v1beta/models/{config.CLOUD_MODEL}:generateContent?key={key}",
                 json={"contents": contents}
             ) as resp:
                 data = await resp.json()
                 return data["candidates"][0]["content"]["parts"][0]["text"]
 
     async def _copilot_chat(self, messages: list) -> str:
-        # GitHub Copilot Pro via VS Code extension API (simplified)
         raise RuntimeError("Copilot chat not yet implemented — use Gemini or local LLMs")
 
+
+# Global router instance
 router = ModelRouter()
+
+
+# Functions expected by modes/*.py
+
+async def discover_local_models() -> list:
+    """Discover available local models."""
+    models = []
+    try:
+        import aiohttp
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{config.OLLAMA_URL}/api/tags") as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    for m in data.get("models", []):
+                        models.append({
+                            "id": m.get("name", "unknown"),
+                            "provider": "ollama",
+                            "name": m.get("name", "unknown"),
+                        })
+    except Exception:
+        pass
+    try:
+        import aiohttp
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{config.LMSTUDIO_URL}/v1/models") as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    for m in data.get("data", []):
+                        models.append({
+                            "id": m.get("id", "unknown"),
+                            "provider": "lmstudio",
+                            "name": m.get("id", "unknown"),
+                        })
+    except Exception:
+        pass
+    return models
+
+
+async def discover_cloud_models() -> list:
+    """Discover available cloud models."""
+    models = []
+    if config.GEMINI_API_KEY:
+        models.append({
+            "id": config.CLOUD_MODEL,
+            "provider": "google",
+            "name": config.CLOUD_MODEL,
+        })
+    return models
+
+
+async def select_model(prefer_local: bool = True) -> str:
+    """Select the best available model based on API mode."""
+    if config.API_MODE == "local-only":
+        return config.LOCAL_MODEL
+    elif config.API_MODE == "cloud-only":
+        return config.CLOUD_MODEL
+    else:
+        if prefer_local:
+            return config.LOCAL_MODEL
+        return config.CLOUD_MODEL
+
+
+async def chat_completion(
+    messages: list,
+    model: Optional[str] = None,
+    stream: bool = False,
+) -> AsyncGenerator[str, None]:
+    """Generate chat completion. Yields chunks if stream=True, else full response."""
+    if not stream:
+        full = await router.chat(messages)
+        yield full
+        return
+
+    # Simulate streaming by yielding word-by-word
+    full = await router.chat(messages)
+    words = full.split(" ")
+    for word in words:
+        yield word + " "
