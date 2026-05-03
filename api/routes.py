@@ -12,6 +12,7 @@ from modes.ask_mode import ask
 from modes.plan_mode import plan, execute_step
 from modes.agent_mode import agent_run
 from modes.swarm_mode import swarm_run
+from agents.swarm_orchestrator import orchestrator
 
 router = APIRouter()
 
@@ -151,9 +152,12 @@ async def chat_stream(req: ChatRequest):
 
 @router.post("/swarm")
 async def swarm(req: ChatRequest):
-    """Run the multi-agent swarm on a task."""
-    req.mode = "swarm"
-    return await chat(req)
+    """Run the multi-agent swarm on a task — streams raw agent JSON."""
+    async def generate():
+        async for result in orchestrator.run_swarm(req.message, req.workspace_context or ""):
+            yield f"data: {json.dumps(result)}\n\n"
+        yield "data: {\"done\": true}\n\n"
+    return StreamingResponse(generate(), media_type="text/event-stream")
 
 
 @router.post("/plan")

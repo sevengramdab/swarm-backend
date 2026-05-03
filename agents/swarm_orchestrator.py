@@ -34,9 +34,9 @@ class SwarmOrchestrator:
         async def run_agent(key, agent):
             try:
                 result = await self.run_single(key, task, context)
-                return {"agent": agent.name, "result": result, "status": "done"}
+                return {"agent": key, "result": result, "status": "done"}
             except Exception as e:
-                return {"agent": agent.name, "error": str(e), "status": "error"}
+                return {"agent": key, "error": str(e), "status": "error"}
 
         tasks = [run_agent(k, a) for k, a in selected.items()]
         for coro in asyncio.as_completed(tasks):
@@ -46,7 +46,7 @@ class SwarmOrchestrator:
         # Final synthesis
         yield {"agent": "orchestrator", "status": "synthesizing"}
         synthesis = await self._synthesize(task, context)
-        yield {"agent": "Synthesis", "result": synthesis, "status": "done"}
+        yield {"agent": "synthesis", "result": synthesis, "status": "done"}
 
     def _select_agents(self, task: str) -> Dict:
         task_lower = task.lower()
