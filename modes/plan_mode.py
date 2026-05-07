@@ -23,6 +23,8 @@ async def plan(
     workspace_context: str = "",
     auto_execute: bool = False,
     stream: bool = True,
+    temperature: float | None = None,
+    model: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Create a step-by-step plan for the user's request."""
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -47,8 +49,8 @@ Format your response as:
     
     messages.append({"role": "user", "content": prompt})
     
-    model = await select_model(prefer_local=True)
-    async for chunk in chat_completion(messages, model=model, stream=stream):
+    selected = model or await select_model(prefer_local=True)
+    async for chunk in chat_completion(messages, model=selected, stream=stream, temperature=temperature):
         yield chunk
 
 
@@ -58,6 +60,8 @@ async def execute_step(
     total_steps: int,
     workspace_context: str = "",
     stream: bool = True,
+    temperature: float | None = None,
+    model: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Execute a single step from a plan."""
     system = f"""You are executing step {step_number} of {total_steps} from a plan.
@@ -74,6 +78,6 @@ If you need to run a command, specify the exact command."""
     
     messages.append({"role": "user", "content": f"Execute this step:\n\n{step_description}"})
     
-    model = await select_model(prefer_local=True)
-    async for chunk in chat_completion(messages, model=model, stream=stream):
+    selected = model or await select_model(prefer_local=True)
+    async for chunk in chat_completion(messages, model=selected, stream=stream, temperature=temperature):
         yield chunk
