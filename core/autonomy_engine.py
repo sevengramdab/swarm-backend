@@ -149,6 +149,7 @@ class AutonomyEngine:
         self.wait_for_tool_result: Optional[Callable[[str, str, dict], asyncio.Future[ToolResult]]] = None
         self.wait_for_decision: Optional[Callable[[str, str, dict], asyncio.Future[str]]] = None
         self.get_steering: Optional[Callable[[str], Optional[str]]] = None
+        self.check_stop: Optional[Callable[[str], bool]] = None
 
     def _track_tokens(self, messages: List[Dict[str, str]], response_text: str):
         """Estimate and track token usage for this LLM call."""
@@ -212,6 +213,16 @@ class AutonomyEngine:
 
         for iteration in range(self.max_iterations):
             self.iteration = iteration
+
+            # --- Check for stop signal ---
+            if self.check_stop and self.check_stop(self.session_id):
+                yield SSEEvent("text", {"chunk": "\n[Stopped by user]\n"})
+                if self._dashboard_agent_id:
+                    state_manager.update_agent_status(self._dashboard_agent_id, "idle")
+                    await state_manager.broadcast_agent_update(self.session_id, self._dashboard_agent_id)
+                    await state_manager.broadcast_circuit(self.session_id)
+                yield SSEEvent("task_complete", {"session_id": self.session_id, "result": "[Stopped by user]", "iterations": iteration})
+                return
 
             # --- Check for steering messages ---
             if self.get_steering:
@@ -499,6 +510,8 @@ class AutonomyEngine:
         # --- Phase 1: Architect + Researcher (parallel) ---
         arch_agent = state_manager.spawn_agent(root.agent_id, "architect", "Architect", "System design and planning specialist.")
         research_agent = state_manager.spawn_agent(root.agent_id, "researcher", "Researcher", "Codebase investigation specialist.")
+        await state_manager.broadcast_agent_update(self.session_id, arch_agent.agent_id)
+        await state_manager.broadcast_agent_update(self.session_id, research_agent.agent_id)
 
         if self.autonomy == AutonomyLevel.DEFAULT:
             req_id = f"phase1-{str(uuid.uuid4())[:8]}"
@@ -520,12 +533,16 @@ class AutonomyEngine:
             if not approved:
                 state_manager.update_agent_status(arch_agent.agent_id, "paused")
                 state_manager.update_agent_status(research_agent.agent_id, "paused")
+                await state_manager.broadcast_agent_update(self.session_id, arch_agent.agent_id)
+                await state_manager.broadcast_agent_update(self.session_id, research_agent.agent_id)
                 await state_manager.broadcast_circuit(self.session_id)
                 yield SSEEvent("text", {"chunk": "\n[Swarm halted at Phase 1 by user.]"})
                 return
 
         state_manager.update_agent_status(arch_agent.agent_id, "active")
         state_manager.update_agent_status(research_agent.agent_id, "active")
+        await state_manager.broadcast_agent_update(self.session_id, arch_agent.agent_id)
+        await state_manager.broadcast_agent_update(self.session_id, research_agent.agent_id)
         await state_manager.broadcast_circuit(self.session_id)
 
         yield SSEEvent("text", {"chunk": "**[Architect]** Analyzing task and creating plan...\n"})
@@ -542,6 +559,8 @@ class AutonomyEngine:
 
         state_manager.update_agent_status(arch_agent.agent_id, "committed")
         state_manager.update_agent_status(research_agent.agent_id, "committed")
+        await state_manager.broadcast_agent_update(self.session_id, arch_agent.agent_id)
+        await state_manager.broadcast_agent_update(self.session_id, research_agent.agent_id)
         await state_manager.broadcast_circuit(self.session_id)
 
         plan_short = plan[:800] + "..." if len(plan) > 800 else plan
@@ -552,6 +571,7 @@ class AutonomyEngine:
 
         # --- Phase 2: Coder (sequential, with tool access) ---
         coder_agent = state_manager.spawn_agent(root.agent_id, "coder", "Coder", "Code implementation specialist.")
+        await state_manager.broadcast_agent_update(self.session_id, coder_agent.agent_id)
 
         if self.autonomy == AutonomyLevel.DEFAULT:
             req_id = f"phase2-{str(uuid.uuid4())[:8]}"
@@ -572,11 +592,13 @@ class AutonomyEngine:
                     approved = False
             if not approved:
                 state_manager.update_agent_status(coder_agent.agent_id, "paused")
+                await state_manager.broadcast_agent_update(self.session_id, coder_agent.agent_id)
                 await state_manager.broadcast_circuit(self.session_id)
                 yield SSEEvent("text", {"chunk": "\n[Swarm halted at Phase 2 by user.]"})
                 return
 
         state_manager.update_agent_status(coder_agent.agent_id, "active")
+        await state_manager.broadcast_agent_update(self.session_id, coder_agent.agent_id)
         await state_manager.broadcast_circuit(self.session_id)
 
         yield SSEEvent("text", {"chunk": "**[Coder]** Writing code with tool access...\n\n"})
@@ -594,6 +616,7 @@ class AutonomyEngine:
             code = "(Coder output placeholder)"
 
         state_manager.update_agent_status(coder_agent.agent_id, "committed")
+        await state_manager.broadcast_agent_update(self.session_id, coder_agent.agent_id)
         await state_manager.broadcast_circuit(self.session_id)
 
         code_short = code[:800] + "..." if len(code) > 800 else code
@@ -603,6 +626,8 @@ class AutonomyEngine:
         # --- Phase 3: Tester + Debugger (parallel, with tool access) ---
         tester_agent = state_manager.spawn_agent(root.agent_id, "tester", "Tester", "Test writing and validation specialist.")
         debugger_agent = state_manager.spawn_agent(root.agent_id, "debugger", "Debugger", "Bug finding and fixing specialist.")
+        await state_manager.broadcast_agent_update(self.session_id, tester_agent.agent_id)
+        await state_manager.broadcast_agent_update(self.session_id, debugger_agent.agent_id)
 
         if self.autonomy == AutonomyLevel.DEFAULT:
             req_id = f"phase3-{str(uuid.uuid4())[:8]}"
@@ -624,12 +649,16 @@ class AutonomyEngine:
             if not approved:
                 state_manager.update_agent_status(tester_agent.agent_id, "paused")
                 state_manager.update_agent_status(debugger_agent.agent_id, "paused")
+                await state_manager.broadcast_agent_update(self.session_id, tester_agent.agent_id)
+                await state_manager.broadcast_agent_update(self.session_id, debugger_agent.agent_id)
                 await state_manager.broadcast_circuit(self.session_id)
                 yield SSEEvent("text", {"chunk": "\n[Swarm halted at Phase 3 by user.]"})
                 return
 
         state_manager.update_agent_status(tester_agent.agent_id, "active")
         state_manager.update_agent_status(debugger_agent.agent_id, "active")
+        await state_manager.broadcast_agent_update(self.session_id, tester_agent.agent_id)
+        await state_manager.broadcast_agent_update(self.session_id, debugger_agent.agent_id)
         await state_manager.broadcast_circuit(self.session_id)
 
         yield SSEEvent("text", {"chunk": "**[Tester]** Writing tests and checking edge cases...\n"})
@@ -658,6 +687,8 @@ class AutonomyEngine:
 
         state_manager.update_agent_status(tester_agent.agent_id, "committed")
         state_manager.update_agent_status(debugger_agent.agent_id, "committed")
+        await state_manager.broadcast_agent_update(self.session_id, tester_agent.agent_id)
+        await state_manager.broadcast_agent_update(self.session_id, debugger_agent.agent_id)
         await state_manager.broadcast_circuit(self.session_id)
 
         tests_short = tests[:600] + "..." if len(tests) > 600 else tests
@@ -669,6 +700,7 @@ class AutonomyEngine:
         # --- Phase 4: Execution (with tools) ---
         # If the task involves coding, let an executor agent actually implement the plan using tools.
         executor_agent = state_manager.spawn_agent(root.agent_id, "executor", "Executor", "Swarm execution specialist.")
+        await state_manager.broadcast_agent_update(self.session_id, executor_agent.agent_id)
         state_manager.update_agent_status(executor_agent.agent_id, "active")
         await state_manager.broadcast_circuit(self.session_id)
 
@@ -723,13 +755,16 @@ class AutonomyEngine:
                 if event.event_type == "task_complete":
                     yield SSEEvent("text", {"chunk": "\n**[Executor]** Implementation complete.\n\n"})
                     state_manager.update_agent_status(executor_agent.agent_id, "committed")
+                    await state_manager.broadcast_agent_update(self.session_id, executor_agent.agent_id)
                     break
                 else:
                     yield event
 
         state_manager.update_agent_status(executor_agent.agent_id, "committed")
+        await state_manager.broadcast_agent_update(self.session_id, executor_agent.agent_id)
 
         state_manager.update_agent_status(root.agent_id, "committed")
+        await state_manager.broadcast_agent_update(self.session_id, root.agent_id)
         await state_manager.broadcast_circuit(self.session_id)
 
         yield self._emit_token_usage()

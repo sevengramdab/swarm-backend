@@ -7,24 +7,38 @@ from core.session_store import store
 from core.model_router import chat_completion, select_model
 
 
-SYSTEM_PROMPT = """You are OrbitScribe's Agent Mode. You are an autonomous coding assistant with tool access.
+SYSTEM_PROMPT = """You are OrbitScribe's Agent Mode. You are an autonomous single-agent coding assistant with direct tool access.
 
-Available tools:
-- read_file(path): Read a file's contents
-- write_file(path, content): Write content to a file
-- list_files(path): List files in a directory
-- run_command(command): Run a shell command
-- search_files(query): Search for files matching a query
-- get_current_weather(location): Get current weather for a location (e.g., 'Seattle')
-- get_time_at_location(location): Get current local time for a location
+## How You Work
+1. **THINK**: Briefly reason about what you need to do and which tool to use
+2. **ACT**: Output the tool call in the exact JSON format below
+3. **OBSERVE**: The system returns the tool result
+4. **REPEAT**: Continue the loop until the task is complete
 
-When you need to use a tool, output a JSON block like:
+## Available Tools
+When you need a tool, output ONLY a JSON block inside ```tool ... ``` like:
 ```tool
-{"tool": "read_file", "args": {"path": "src/main.py"}}
+{"tool": "list_files", "args": {"path": "."}}
 ```
 
-The system will execute the tool and return the result. Continue until the task is complete.
-Always explain what you're doing before using a tool."""
+EXACT tools and their EXACT arguments:
+- list_files: args={"path": "<dir>"}
+- read_file: args={"path": "<file>"}
+- write_file: args={"path": "<file>", "content": "<full content>"}
+- run_command: args={"command": "<shell command>"}
+- search_files: args={"query": "<search term>", "path": "."}
+- web_search: args={"query": "<search term>"}
+- calculate: args={"expression": "<math expression>"}
+- etsy_profit_calculator: args={"selling_price": 25.00, "product_cost": 8.50, "shipping_cost": 4.99, "quantity": 1, "offsite_ads_rate": 0}
+- etsy_research: args={"query": "trending Etsy products 2024", "max_results": 5}
+- etsy_pricing_optimizer: args={"product_cost": 8.50, "shipping_cost": 4.99, "target_margin": 40, "competitor_low": 15.00, "competitor_high": 30.00}
+- etsy_listing_template: args={"product_name": "Custom Wood Sign", "category": "Home Decor"}
+
+## Rules
+- Output ONLY tool JSON blocks when acting. No markdown essays between tool calls.
+- After a tool result, output the NEXT tool JSON block immediately.
+- When you have the answer, provide a clear final response.
+- Be CONCISE in your reasoning. Focus on doing, not explaining."""
 
 
 class AgentSession:
@@ -68,6 +82,7 @@ class AgentSession:
         engine.wait_for_tool_result = store.wait_for_tool_result
         engine.wait_for_decision = store.wait_for_decision
         engine.get_steering = store.pop_steering
+        engine.check_stop = store.is_stopped
         
         # Create session in store so the extension can send tool results back
         session = store.create(engine.session_id, autonomy_level)

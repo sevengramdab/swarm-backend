@@ -39,12 +39,23 @@ AGENT_ROLES = {
 }
 
 TOOL_SYSTEM_PROMPT = (
-    "You have access to tools: read_file, write_file, list_files, run_command, search_files, web_search. "
-    "YOUR JOB: Use these tools to DO the work. Do NOT write essays, explanations, or tutorials. "
-    "When you need a tool, output ONLY a JSON block like:\n"
-    '```tool\n{"tool": "list_files", "args": {"path": "."}}\n```\n'
-    "After each tool result, continue with the NEXT tool or a brief summary. "
-    "Be CONCISE. One sentence per finding. No fluff. No markdown essays."
+    "You have access to tools. YOUR JOB: Use these tools to DO the work. "
+    "When you need a tool, output ONLY a JSON block inside ```tool ... ``` like:\n"
+    '```tool\n{"tool": "list_files", "args": {"path": "."}}\n```\n\n'
+    "EXACT tools and their EXACT arguments (use ONLY these keys):\n"
+    '- list_files: args={"path": "<dir>"}\n'
+    '- read_file: args={"path": "<file>"}\n'
+    '- write_file: args={"path": "<file>", "content": "<full content>"}\n'
+    '- run_command: args={"command": "<shell command>"}\n'
+    '- search_files: args={"query": "<search term>", "path": "."}\n'
+    '- web_search: args={"query": "<search term>"}\n'
+    '- calculate: args={"expression": "<math expression>"}\n'
+    '- etsy_profit_calculator: args={"selling_price": 25.00, "product_cost": 8.50, "shipping_cost": 4.99, "quantity": 1, "offsite_ads_rate": 0}\n'
+    '- etsy_research: args={"query": "trending Etsy products 2024", "max_results": 5}\n'
+    '- etsy_pricing_optimizer: args={"product_cost": 8.50, "shipping_cost": 4.99, "target_margin": 40, "competitor_low": 15.00, "competitor_high": 30.00}\n'
+    '- etsy_listing_template: args={"product_name": "Custom Wood Sign", "category": "Home Decor"}\n\n'
+    "RULES: Output ONLY tool JSON blocks. No explanations. No summaries. No markdown essays. "
+    "After a tool result, output the NEXT tool JSON block immediately. Be CONCISE."
 )
 
 
@@ -55,10 +66,10 @@ class SwarmOrchestrator:
         self.max_agents = max_agents
         self.messages: List[Dict[str, str]] = []
 
-    async def _call_agent(self, role_key: str, user_content: str, model: str | None = None, use_tools: bool = False, session_id: str | None = None, parent_agent_id: str | None = None, max_iterations: int = 5) -> str:
+    async def _call_agent(self, role_key: str, user_content: str, model: str | None = None, use_tools: bool = False, session_id: str | None = None, parent_agent_id: str | None = None, max_iterations: int = 5, emit=None) -> str:
         """Call a single agent and return its full response."""
         if use_tools:
-            return await self._call_agent_with_tools(role_key, user_content, model=model, max_iterations=max_iterations, session_id=session_id, parent_agent_id=parent_agent_id)
+            return await self._call_agent_with_tools(role_key, user_content, model=model, max_iterations=max_iterations, session_id=session_id, parent_agent_id=parent_agent_id, emit=emit)
 
         messages = [
             {"role": "system", "content": AGENT_ROLES[role_key]["system"]},
@@ -80,9 +91,13 @@ class SwarmOrchestrator:
                 await state_manager.broadcast_telemetry(agent.session_id, parent_agent_id, agent.telemetry)
         return result
 
-    async def _call_agent_with_tools(self, role_key: str, user_content: str, model: str | None = None, max_iterations: int = 5, session_id: str | None = None, parent_agent_id: str | None = None) -> str:
-        """Run a short agent loop with DIRECT tool execution for a subagent."""
-        from core.autonomy_engine import ToolResult
+    async def _call_agent_with_tools(self, role_key: str, user_content: str, model: str | None = None, max_iterations: int = 5, session_id: str | None = None, parent_agent_id: str | None = None, emit=None) -> str:
+        """Run a short agent loop with DIRECT tool execution for a subagent.
+        
+        Args:
+            emit: Optional callback async fn(event_type, payload) to stream structured events.
+        """
+        from core.autonomy_engine import ToolResult, SSEEvent
 
         system_prompt = AGENT_ROLES[role_key]["system"] + "\n\n" + TOOL_SYSTEM_PROMPT
         messages = [
@@ -128,6 +143,10 @@ class SwarmOrchestrator:
                 args = tc.get("args", {})
                 request_id = f"sub-{role_key}-{iteration}-{tool_name}"
 
+                # Emit structured tool_call event
+                if emit:
+                    await emit("tool_call", {"agent": role_key, "tool": tool_name, "args": args})
+
                 task_item = None
                 if dashboard_agent:
                     task_item = state_manager.add_task(parent_agent_id, f"Execute {tool_name}")
@@ -143,6 +162,15 @@ class SwarmOrchestrator:
                     data=raw_result.get("data"),
                     error=raw_result.get("error", ""),
                 )
+
+                # Emit structured tool_result event
+                if emit:
+                    await emit("tool_result", {
+                        "agent": role_key,
+                        "tool": tool_name,
+                        "status": result.status,
+                        "error": result.error,
+                    })
 
                 tool_results.append(result.to_dict())
                 messages.append({"role": "user", "content": f"Tool result: {json.dumps(result.to_dict())}"})
@@ -188,6 +216,7 @@ class SwarmOrchestrator:
         engine.wait_for_tool_result = store.wait_for_tool_result
         engine.wait_for_decision = store.wait_for_decision
         engine.get_steering = store.pop_steering
+        engine.check_stop = store.is_stopped
 
         store.create(engine.session_id, autonomy_level)
 
@@ -195,13 +224,14 @@ class SwarmOrchestrator:
         async for event in engine.run_swarm_path(
             task=task,
             workspace_context=workspace_context,
-            call_agent_fn=lambda role, content, use_tools=False, parent_agent_id=None: self._call_agent(
+            call_agent_fn=lambda role, content, use_tools=False, parent_agent_id=None, emit=None: self._call_agent(
                 role, content,
                 model=orchestrator_model or model,
                 use_tools=use_tools,
                 session_id=engine.session_id,
                 parent_agent_id=parent_agent_id,
-                max_iterations=2,
+                max_iterations=3,
+                emit=emit,
             ),
         ):
             yield event

@@ -1,0 +1,16 @@
+[
+  {
+    "id": "vault-001",
+    "name": "Test Product",
+    "title": "Test Title",
+    "description": "<p>Test</p>",
+    "tags": [
+      "test",
+      "tag"
+    ],
+    "price": 29.99,
+    "cost": 0,
+    "notes": "",
+    "created": 1778308698
+  }
+]

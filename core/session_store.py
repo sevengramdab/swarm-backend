@@ -3,11 +3,17 @@ In-memory session store for agent loops awaiting user approvals or tool results.
 """
 
 import asyncio
+import json
+import os
 from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, field
 
 from core.autonomy_engine import ToolResult
 from core.change_tracker import ChangeBatch
+
+# Directory for persisting saved sessions
+SESSIONS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "tools", "saved_sessions")
+os.makedirs(SESSIONS_DIR, exist_ok=True)
 
 
 @dataclass
@@ -15,6 +21,7 @@ class Session:
     session_id: str
     autonomy_level: str = "default"
     messages: list = field(default_factory=list)
+    stopped: bool = False
     # Pending approvals
     approval_events: Dict[str, asyncio.Event] = field(default_factory=dict)
     approval_results: Dict[str, bool] = field(default_factory=dict)
@@ -49,6 +56,80 @@ class SessionStore:
             del self._sessions[session_id]
             return True
         return False
+
+    def stop(self, session_id: str) -> bool:
+        session = self._sessions.get(session_id)
+        if session:
+            session.stopped = True
+            return True
+        return False
+
+    def is_stopped(self, session_id: str) -> bool:
+        session = self._sessions.get(session_id)
+        return session.stopped if session else False
+
+    def save(self, session_id: str) -> dict:
+        session = self._sessions.get(session_id)
+        if not session:
+            return {"ok": False, "error": "Session not found"}
+        filepath = os.path.join(SESSIONS_DIR, f"{session_id}.json")
+        try:
+            with open(filepath, "w", encoding="utf-8") as f:
+                json.dump({
+                    "session_id": session.session_id,
+                    "autonomy_level": session.autonomy_level,
+                    "messages": session.messages,
+                    "saved_at": __import__("datetime").datetime.utcnow().isoformat(),
+                }, f, indent=2, default=str)
+            return {"ok": True, "filepath": filepath, "message_count": len(session.messages)}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def load(self, session_id: str) -> dict:
+        filepath = os.path.join(SESSIONS_DIR, f"{session_id}.json")
+        if not os.path.exists(filepath):
+            return {"ok": False, "error": "Saved session not found"}
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            session = self._sessions.get(session_id)
+            if not session:
+                session = self.create(session_id, data.get("autonomy_level", "default"))
+            session.messages = data.get("messages", [])
+            return {"ok": True, "message_count": len(session.messages)}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def delete_saved(self, session_id: str) -> dict:
+        filepath = os.path.join(SESSIONS_DIR, f"{session_id}.json")
+        removed = self.remove(session_id)
+        try:
+            if os.path.exists(filepath):
+                os.remove(filepath)
+                file_deleted = True
+            else:
+                file_deleted = False
+            return {"ok": True, "removed_from_memory": removed, "file_deleted": file_deleted}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def list_saved(self) -> List[dict]:
+        results = []
+        if not os.path.isdir(SESSIONS_DIR):
+            return results
+        for fname in sorted(os.listdir(SESSIONS_DIR)):
+            if fname.endswith(".json"):
+                fpath = os.path.join(SESSIONS_DIR, fname)
+                try:
+                    stat = os.stat(fpath)
+                    results.append({
+                        "session_id": fname[:-5],
+                        "size_bytes": stat.st_size,
+                        "modified_at": __import__("datetime").datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                    })
+                except Exception:
+                    pass
+        return results
 
     def push_steering(self, session_id: str, message: str) -> bool:
         session = self._sessions.get(session_id)

@@ -15,7 +15,7 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 KIMI_API_KEY = os.environ.get("KIMI_API_KEY", "")
 OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "")
 
-LOCAL_MODEL = os.environ.get("LOCAL_MODEL", "qwen2.5-coder:14b")
+LOCAL_MODEL = os.environ.get("LOCAL_MODEL", "llama3.1:8b")
 CLOUD_MODEL = os.environ.get("CLOUD_MODEL", "gemini-2.0-flash")
 ORCHESTRATOR_MODEL = os.environ.get("ORCHESTRATOR_MODEL", CLOUD_MODEL)
 
@@ -28,6 +28,20 @@ TEMPERATURE = float(os.environ.get("SWARM_TEMPERATURE", "0.7"))
 # Subagent spawning mode: cloud | local | hybrid
 SUBAGENT_MODE = os.environ.get("SUBAGENT_MODE", "hybrid").lower()
 
-# Workspace root for tool execution (set by extension per-session)
-WORKSPACE_ROOT = os.environ.get("ORBITSCRIBE_WORKSPACE_ROOT", "")
+# Default workspace root — auto-detect project root from backend location, fallback to cwd, then home
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+# config.py is in swarm-backend/core/, so project root is two levels up
+_detected_project_root = os.path.abspath(os.path.join(_script_dir, "..", ".."))
+# Validate: project root should contain swarm-backend/ and extension/ or tools/
+if not (os.path.isdir(os.path.join(_detected_project_root, "swarm-backend")) and
+        (os.path.isdir(os.path.join(_detected_project_root, "extension")) or
+         os.path.isdir(os.path.join(_detected_project_root, "tools")))):
+    # Fall back to parent of cwd (backend is usually started from swarm-backend/)
+    _detected_project_root = os.path.abspath(os.path.join(os.getcwd(), ".."))
+
+_default_workspace = _detected_project_root
+WORKSPACE_ROOT = os.environ.get("ORBITSCRIBE_WORKSPACE_ROOT", _default_workspace)
+
+# Ensure workspace exists
+os.makedirs(WORKSPACE_ROOT, exist_ok=True)
 
