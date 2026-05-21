@@ -1,0 +1,39 @@
+# SimplePod Swarm — Docker Compose Deployment
+# ===========================================
+# One command to deploy the entire control plane:
+#   docker-compose up -d
+#
+# ELI5: This is like a pre-wired portable generator.
+#       You wheel it to the job site, plug in the fuel
+#       (env vars), and pull the starter cord.
+
+services:
+  simplepod-swarm:
+    build: .
+    container_name: simplepod-swarm
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount your config file so you can edit it without rebuilding
+      - ./config.yaml:/app/config.yaml:ro
+      # Persistent backup directory
+      - ./ark_backups:/app/ark_backups
+      # Telemetry logs survive container restarts
+      - ./telemetry_logs:/app/telemetry_logs
+    environment:
+      # Cloud API keys (replace in .env file)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      # Twilio credentials
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID:-}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN:-}
+      # Tailscale mesh auth
+      - TAILSCALE_AUTH_KEY=${TAILSCALE_AUTH_KEY:-}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

@@ -1,0 +1,126 @@
+{
+  "name": "simplepod-swarm",
+  "displayName": "SimplePod Swarm Control",
+  "description": "IDE control plane for SimplePod Surgical Strike Swarm — dashboard, capture, and auto-resume",
+  "version": "0.2.0",
+  "publisher": "simplepod",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Machine Learning",
+    "Debuggers",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:simplepod.openDashboard",
+    "onCommand:simplepod.captureScreenshot",
+    "onCommand:simplepod.activateSwarm",
+    "onCommand:simplepod.shutdownSwarm",
+    "onCommand:simplepod.setMainBreaker",
+    "onCommand:simplepod.reconnect"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "simplepod-swarm",
+          "title": "SimplePod Swarm",
+          "icon": "$(circuit-board)"
+        }
+      ]
+    },
+    "views": {
+      "simplepod-swarm": [
+        {
+          "id": "simplepod.agents",
+          "name": "Agents"
+        },
+        {
+          "id": "simplepod.nodes",
+          "name": "Nodes"
+        },
+        {
+          "id": "simplepod.transfers",
+          "name": "Transfers"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "simplepod.openDashboard",
+        "title": "Open Swarm Dashboard",
+        "category": "SimplePod",
+        "icon": "$(dashboard)"
+      },
+      {
+        "command": "simplepod.captureScreenshot",
+        "title": "Capture Dashboard for Analysis",
+        "category": "SimplePod",
+        "icon": "$(device-camera)"
+      },
+      {
+        "command": "simplepod.activateSwarm",
+        "title": "Activate Swarm",
+        "category": "SimplePod",
+        "icon": "$(play)"
+      },
+      {
+        "command": "simplepod.shutdownSwarm",
+        "title": "Shutdown Swarm",
+        "category": "SimplePod",
+        "icon": "$(stop)"
+      },
+      {
+        "command": "simplepod.setMainBreaker",
+        "title": "Set Main Breaker Threshold",
+        "category": "SimplePod",
+        "icon": "$(settings)"
+      },
+      {
+        "command": "simplepod.reconnect",
+        "title": "Reconnect to Backend",
+        "category": "SimplePod",
+        "icon": "$(refresh)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "simplepod.openDashboard",
+        "key": "ctrl+shift+s",
+        "mac": "cmd+shift+s",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "simplepod.captureScreenshot",
+        "key": "ctrl+shift+c",
+        "mac": "cmd+shift+c",
+        "when": "simplepod:dashboardVisible"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        { "command": "simplepod.openDashboard" },
+        { "command": "simplepod.captureScreenshot" }
+      ],
+      "view/title": [
+        {
+          "command": "simplepod.openDashboard",
+          "when": "view == simplepod.agents",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0"
+  }
+}

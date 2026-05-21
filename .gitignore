@@ -1,0 +1,164 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# SimplePod Surgical Strike Swarm — .gitignore
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ── Python / Virtual Environments ─────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environments
+venv/
+.venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# ── Pytest / Coverage ─────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# ── MyPy / Type Checking ──────────────────────────────────────────────────────
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ── Ruff / Linting ────────────────────────────────────────────────────────────
+.ruff_cache/
+
+# ── IDE / Editors ─────────────────────────────────────────────────────────────
+# VS Code
+.vscode/
+*.code-workspace
+
+# PyCharm / IntelliJ
+.idea/
+*.iml
+*.iws
+out/
+
+# Sublime
+*.sublime-project
+*.sublime-workspace
+
+# Vim / Emacs
+*.swp
+*.swo
+*~
+.*.swp
+.*.swo
+\#*\#
+.\#*
+
+# ── Node.js / Frontend (Reflex builds) ────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+.web/
+frontend/
+*.log
+
+# ── Operating System ──────────────────────────────────────────────────────────
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.stackdump
+
+# Linux
+.directory
+.Trash-*
+
+# ── Secrets / Environment ─────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+secrets.json
+credentials.json
+*.pem
+*.key
+*.crt
+*.pfx
+
+# ── Logs / Local Data ─────────────────────────────────────────────────────────
+*.log
+logs/
+log/
+*.pid
+*.seed
+*.state
+
+# ── Local Backups (ark_backups stays local, never in Git) ─────────────────────
+ark_backups/
+*.bak
+*.backup
+*.orig
+
+# ── Database / Local Storage ──────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+*.sql
+
+# ── Docker / Deployment Artifacts ─────────────────────────────────────────────
+*.env.docker
+docker-compose.override.yml
+*.tar
+*.tar.gz
+*.tgz
+
+# ── Tailscale / Mesh (if generated locally) ───────────────────────────────────
+tailscale.authkey
+tailscale.state
+
+# ── Reflex / Generated Frontend ───────────────────────────────────────────────
+.reflex/
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+*.tmp
+*.temp
+.cache/
+*.prof
+*.lprof

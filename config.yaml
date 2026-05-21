@@ -1,0 +1,113 @@
+# SimplePod Swarm Configuration
+# =============================
+# Like the directory sticker inside the main electrical panel door.
+# Every circuit, breaker size, and room assignment is listed here.
+
+# ---------------------------------------------------------------------------
+# Node Definitions
+# ---------------------------------------------------------------------------
+nodes:
+  local_msi:
+    hostname: "msi-local"
+    ip: "192.168.1.100"
+    role: "local_msi"
+    gpu_type: "gtx_1650"
+    vram_mb: 4096
+    status: "active"
+
+  shadow_pc:
+    hostname: "shadow-workstation"
+    ip: "100.64.0.2"  # Tailscale IP
+    role: "shadow_pc"
+    gpu_type: "rtx_3080"
+    vram_mb: 10240
+    status: "active"
+
+  simplepod_rtx5090_poland_01:
+    hostname: "simplepod-01"
+    ip: "100.64.0.10"
+    role: "simplepod_rtx5090"
+    gpu_type: "rtx_5090"
+    vram_mb: 32768
+    status: "ephemeral"
+    region: "poland"
+
+# ---------------------------------------------------------------------------
+# LLM Endpoints (Local)
+# ---------------------------------------------------------------------------
+local_llm:
+  ollama:
+    url: "http://127.0.0.1:11434"
+    models:
+      - "llama3:8b"
+      - "mistral:7b"
+      - "phi3:mini"
+
+  lmstudio:
+    url: "http://127.0.0.1:1234"
+    models:
+      - "local-model"
+
+# ---------------------------------------------------------------------------
+# Cloud API Keys (REPLACE WITH REAL KEYS)
+# ---------------------------------------------------------------------------
+cloud_apis:
+  openai:
+    api_key: "${OPENAI_API_KEY}"
+    base_url: "https://api.openai.com/v1"
+    model_map:
+      fast: "gpt-3.5-turbo"
+      balanced: "gpt-4"
+      frontier: "gpt-4o"
+
+  anthropic:
+    api_key: "${ANTHROPIC_API_KEY}"
+    base_url: "https://api.anthropic.com/v1"
+    model_map:
+      fast: "claude-3-haiku"
+      balanced: "claude-3-sonnet"
+      frontier: "claude-3-opus"
+
+  google:
+    api_key: "${GOOGLE_API_KEY}"
+    base_url: "https://generativelanguage.googleapis.com/v1"
+    model_map:
+      fast: "gemini-1.5-flash"
+      balanced: "gemini-1.5-pro"
+      frontier: "gemini-1.5-pro"
+
+# ---------------------------------------------------------------------------
+# Main Breaker Defaults
+# ---------------------------------------------------------------------------
+routing:
+  default_threshold: 0.5
+  default_mode: "auto"
+  balancing_strategy: "least_connections"
+
+# ---------------------------------------------------------------------------
+# Twilio Credentials (REPLACE WITH REAL KEYS)
+# ---------------------------------------------------------------------------
+twilio:
+  account_sid: "${TWILIO_ACCOUNT_SID}"
+  auth_token: "${TWILIO_AUTH_TOKEN}"
+  from_number: "+1234567890"
+  authorized_numbers:
+    - "+14155551234"  # Mom
+
+# ---------------------------------------------------------------------------
+# Telemetry Settings
+# ---------------------------------------------------------------------------
+telemetry:
+  persist_path: "./telemetry_logs"
+  max_file_size_mb: 100
+  flush_interval_seconds: 5
+  batch_size: 100
+  compress_after_days: 7
+
+# ---------------------------------------------------------------------------
+# Mesh Network
+# ---------------------------------------------------------------------------
+mesh:
+  tailscale_auth_key: "${TAILSCALE_AUTH_KEY}"
+  wireguard_port: 51820
+  keepalive_seconds: 25

@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SimplePod Swarm v2.6 — Control Plane</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-title">
+            <span>⚡</span>
+            <span>SimplePod Swarm <span style="color:var(--text-secondary);font-weight:400;font-size:0.875rem;">v2.6</span></span>
+        </div>
+        <div class="header-status">
+            <span class="status-dot"></span>
+            <span id="modeDisplay">⚖️ AUTO</span>
+            <span style="color:var(--border);">|</span>
+            <span id="headerUptime">--</span>
+            <span style="color:var(--border);">|</span>
+            <button id="btnSettings" class="btn btn-sm" style="margin-left:0.5rem;">⚙️ Settings</button>
+        </div>
+    </header>
+
+    <!-- Settings Panel (modal overlay) -->
+    <div id="settingsOverlay" class="settings-overlay">
+        <div class="settings-panel">
+            <div class="settings-header">
+                <div class="settings-title">⚙️ Settings</div>
+                <button id="btnCloseSettings" class="btn btn-sm">✕ Close</button>
+            </div>
+
+            <div class="settings-tabs">
+                <button class="settings-tab active" data-tab="api">API</button>
+                <button class="settings-tab" data-tab="ollama">Ollama</button>
+                <button class="settings-tab" data-tab="swarm">Swarm</button>
+                <button class="settings-tab" data-tab="routing">Routing</button>
+                <button class="settings-tab" data-tab="tiers">Tiers</button>
+                <button class="settings-tab" data-tab="ui">UI</button>
+                <button class="settings-tab" data-tab="telemetry">Telemetry</button>
+                <button class="settings-tab" data-tab="discovery">Discovery</button>
+                <button class="settings-tab" data-tab="security">Security</button>
+                <button class="settings-tab" data-tab="advanced">Advanced</button>
+            </div>
+
+            <div class="settings-content">
+                <!-- API Tab -->
+                <div class="settings-section active" data-section="api">
+                    <div class="settings-grid">
+                        <div class="setting-group">
+                            <label>API Host</label>
+                            <input type="text" class="setting-input" data-key="api_host" placeholder="0.0.0.0">
+                        </div>
+                        <div class="setting-group">
+                            <label>API Port</label>
+                            <input type="number" class="setting-input" data-key="api_port" min="1" max="65535">
+                        </div>
+                        <div class="setting-group">
+                            <label>API Base URL</label>
+                            <input type="text" class="setting-input" data-key="api_base_url" placeholder="http://localhost:8000">
+                        </div>
+                        <div class="setting-group">
+                            <label>Request Timeout (seconds)</label>
+                            <input type="number" class="setting-input" data-key="request_timeout_seconds" min="1" max="300" step="0.5">
+                        </div>
+                        <div class="setting-group">
+                            <label>API Retry Count</label>
+                            <input type="number" class="setting-input" data-key="api_retry_count" min="0" max="10">
+                        </div>
+                        <div class="setting-group">
+                            <label>API Retry Delay (seconds)</label>
+                            <input type="number" class="setting-input" data-key="api_retry_delay_seconds" min="0" max="60" step="0.1">
+                        </div>
+                        <div class="setting-group full">
+                            <label>CORS Origins (comma-separated)</label>
+                            <input type="text" class="setting-input" data-key="cors_origins" data-type="csv" placeholder="http://localhost:3000, http://localhost:8000, *">
+                        </div>
+                        <div class="setting-group">
+                            <label>Enable CORS</label>
+                            <label class="toggle"><input type="checkbox" class="setting-input" data-key="enable_cors"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div class="setting-group">
+                            <label>Allow Credentials</label>
+                            <label class="toggle"><input type="checkbox" class="setting-input" data-key="cors_allow_credentials"><span class="toggle-slider"></span></label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Ollama Tab -->
+                <div class="settings-section" data-section="ollama">
+                    <div class="settings-grid">
+                        <div class="setting-group">
+                            <label>Ollama Host</label>
+                            <input type="text" class="setting-input" data-key="ollama_host" placeholder="127.0.0.1">
+                        </div>
+                        <div class="setting-group">
+                            <label>Ollama Port</label>
+                            <input type="number" class="setting-input" data-key="ollama_port" min="1" max="65535">
+                        </div>
+                        <div class="setting-group">
+                            <label>Ollama Base URL</label>
+                            <input type="text" class="setting-input" data-key="ollama_base_url" placeholder="http://localhost:11434">
+                        </div>
+                        <div class="setting-group">
+                            <label>Models Path</label>
+                            <input type="text" class="setting-input" data-key="ollama_models_path" placeholder="/d/ollama/models">
+                        </div>
+                        <div class="setting-group">
+                            <label>Default Model</label>
+                            <select class="setting-input infer-select" data-key="default_model" id="settingDefaultModel">
+                                <option value="llama3.2">llama3.2</option>
+                            </select>
+                        </div>
+                        <div class="setting-group">
+                            <label>Default Temperature</label>
+                            <input type="number" class="setting-input" data-key="default_temperature" min="0" max="2" step="0.05">
+                        </div>
+                        <div class="setting-group full">
+                            <label>Default System Prompt</label>
+                            <textarea class="setting-input" data-key="default_system_prompt" rows="3" placeholder="You are a helpful assistant."></textarea>
+                        </div>
+                        <div class="setting-group">
+                            <label>Default Max Tokens</label>
+                            <input type="number" class="setting-input" data-key="default_max_tokens" min="1" max="32768">
+                        </div>
+                        <div class="setting-group">
+                            <label>Top P</label>
+                            <input type="number" class="setting-input" data-key="default_top_p" min="0" max="1" step="0.01">
+                        </div>
+                        <div class="setting-group">
+                            <label>Top K</label>
+                            <input type="number" class="setting-input" data-key="default_top_k" min="1" max="100">
+                        </div>
+                        <div class="setting-group">
+                            <label>Repeat Penalty</label>
+                            <input type="number" class="setting-input" data-key="default_repeat_penalty" min="1" max="2" step="0.05">
+                        </div>
+                        <div class="setting-group">
+                            <label>Keep-Alive (minutes)</label>
+                            <input type="number" class="setting-input" data-key="ollama_keep_alive_minutes" min="0" max="60">
+                        </div>
+                        <div class="setting-group">
+                            <label>Num Parallel</label>
+                            <input type="number" class="setting-input" data-key="ollama_num_parallel" min="1" max="8">
+                        </div>
+                        <div class="setting-group">
+                            <label>Context Length</label>
+                            <input type="number" class="setting-input" data-key="ollama_context_length" min="512" max="131072" step="512">
+                        </div>
+                        <div class="setting-group">
+                            <label>GPU Overhead (MB)</label>
+                            <input type="number" class="setting-input" data-key="ollama_gpu_overhead_mb" min="0" max="4096">
+                        </div>
+                        <div class="setting-group">
+                            <label>Flash Attention</label>
+                            <label class="toggle"><input type="checkbox" class="setting-input" data-key="ollama_flash_attention"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div class="setting-group">
+                            <label>Vulkan</label>
+                            <label class="toggle"><input type="checkbox" class="setting-input" data-key="ollama_vulkan"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div class="setting-group">
+                            <label>Preload Models on Startup</label>
+                            <label class="toggle"><input type="checkbox" class="setting-input" data-key="preload_models_on_startup"><span class="toggle-slider"></span></label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Swarm Tab -->
+                <div class="settings-section" data-section="swarm">
+                    <div class="settings-grid">
+                        <div class="setting-group">
+                            <label>Max Agents</label>
+                            <input type="number" class="setting-input" data-key="swarm_max_agents" min="1" max="100">
+                        </div>
+                        <div class="setting-group">
+                            <label>Initial Agents</label>
+                            <input type="number" class="setting-input" data-key="swarm_initial_agents" min="1" max="50">
+                        </div>
+                        <div class="setting-group">
+                            <label>Task Timeout (seconds)</label>
+                            <input type="number" class="setting-input" data-key="swarm_task_timeout_seconds" min="1" max="3600" step="0.5">
+                        </div>
+                        <div class="setting-group">
+                            <label>Auto Scale</label>
+                            <label class="toggle"><input type="checkbox" class="setting-input" data-key="swarm_auto_scale"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div class="setting-group">
+                            <label>Worker Threads</label>
+                            <input type="number" class="setting-input" data-key="swarm_worker_threads" min="1" max="32">
+                        </div>
+                        <div class="setting-group">
+                            <label>Agent Spawn Delay (seconds)</label>
+                            <input type="number" class="setting-input" data-key="swarm_agent_spawn_delay_seconds" min="0" max="10" step="0.1">
+                        </div>
+                        <div class="setting-group">
+                            <label>Max Pending Tasks</label>
+                            <input type="number" class="setting-input" data-key="swarm_max_pending_tasks" min="1" max="1000">
+                        </div>
+                        <div class="setting-group">
+                            <label>Agent Idle Timeout (seconds)</label>
+                            <input type="number" class="setting-input" data-key="swarm_agent_idle_timeout_seconds" min="10" max="86400">
+                        </div>
+                        <div class="setting-group">
+                            <label>Agent Max Lifetime (seconds)</label>
+                            <input type="number" class="setting-input" data-key="swarm_agent_max_lifetime_seconds" min="60" max="86400">
+                        </div>
+                        <div class="setting-group">
+                            <label>Enable GPU Scheduling</label>
+                            <label class="toggle"><input type="checkbox" class="setting-input" data-key="swarm_enable_gpu_scheduling"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div class="setting-group">
+                            <label>GPU Memory Threshold (%)</label>
+                            <input type="number" class="setting-input" data-key="swarm_gpu_memory_threshold_percent" min="10" max="99">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Routing Tab -->
+                <div class="settings-section" data-section="routing">
+                    <div class="settings-grid">
+                        <div class="setting-group">
+                            <label>Default Threshold (0-1)</label>
+                            <input type="number" class="setting-input" data-key="routing_default_threshold" min="0" max="1" step="0.01">
+                        </div>
+                        <div class="setting-group">
+                            <label>Default Mode</label>
+                            <select class="setting-input infer-select" data-key="routing_default_mode">
+                                <option value="auto">Auto</option>
+                                <option value="force_local">Force Local</option>
+                                <option value="force_cloud">Force Cloud</option>
+                            </select>
+                        </div>
+                        <div class="setting-group">
+                            <label>Complexity: Reasoning Weight</label>
+                            <input type="number" class="setting-input" data-key="routing_complexity_weight_reasoning" min="0" max="1" step="0.01">
+                        </div>
+                        <div class="setting-group">
+                            <label>Complexity: Tools Weight</label>
+                            <input type="number" class="setting-input" data-key="routing_complexity_weight_tools" min="0" max="1" step="0.01">
+                        </div>
+                        <div class="setting-group">
+                            <label>Complexity: Tokens Weight</label>
+                            <input type="number" class="setting-input" data-key="routing_complexity_weight_tokens" min="0" max="1" step="0.01">
+                        </div>
+                        <div class="setting-group">
+                            <label>Complexity: Latency Weight</label>
+                            <input type="number" class="setting-input" data-key="routing_complexity_weight_latency" min="0" max="1" step="0.01">
+                        </div>
+                        <div class="setting-group">
+                            <label>Complexity: Cost Weight</label>
+                            <input type="number" class="setting-input" data-key="routing_complexity_weight_cost" min="0" max="1" step="0.01">
+                        </div>
+                        <div class="setting-group">
+                            <label>Token Threshold (Low)</label>
+                            <input type="number" class="setting-input" data-key="routing_token_threshold_low" min="1" max="4096">
+                        </div>
+                        <div class="setting-group">
+                            <label>Token Threshold (High)</label>
+                            <input type="number" class="setting-input" data-key="routing_token_threshold_high" min="1" max="32768">
+                        </div>
+                        <div class="setting-group">
+                            <label>Latency Threshold (ms)</label>
+                            <input type="number" class="setting-input" data-key="routing_latency_threshold_ms" min="100" max="60000">
+                        </div>
+                        <div class="setting-group">
+                            <label>Cost Threshold (USD)</label>
+                            <input type="number" class="setting-input" data-key="routing_cost_threshold_usd" min="0" max="1" step="0.001">
+                        </div>
+                        <div class="setting-group">
+                            <label>Enable Tier Health Check</label>
+                            <label class="toggle"><input type="checkbox" class="setting-input" data-key="routing_enable_tier_health_check"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div class="setting-group">
+                            <label>Health Check Interval (seconds)</label>
+                            <input type="number" class="setting-input" data-key="routing_tier_health_check_interval_seconds" min="1" max="300">
+                        </div>
+                        <div class="setting-group">
+                            <label>Fallback to Local on Failure</label>
+                            <label class="toggle"><input type="checkbox" class="setting-input" data-key="routing_fallback_to_local_on_failure"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div class="setting-group">
+                            <label>Max Retries per Tier</label>
+                            <input type="number" class="setting-input" data-key="routing_max_retries_per_tier" min="0" max="10">
+                        </div>
+                        <div class="setting-group">
+                            <label>Retry Backoff (seconds)</label>
+                            <input type="number" class="setting-input" data-key="routing_retry_backoff_seconds" min="0" max="60" step="0.1">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tiers Tab -->
+                <div class="settings-section" data-section="tiers">
+                    <div class="settings-grid">
+                        <div class="setting-group full">
+                            <label>Tier Configurations (JSON array)</label>
+                            <textarea class="setting-input setting-json" data-key="tiers" rows="20" placeholder='[{"name":"local",...}]'></textarea>
+                            <div class="setting-hint">Edit as raw JSON. Each tier needs: name, display_name, nodes[], models[], health_status, priority, cost_per_token, avg_latency_ms</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- UI Tab -->
+                <div class="settings-section" data-section="ui">
+                    <div class="settings-grid">
+                        <div class="setting-group">
+                            <label>Poll Interval (ms)</label>
+                            <input type="number" class="setting-input" data-key="ui_poll_interval_ms" min="500" max="30000" step="100">
+                        </div>
+                        <div class="setting-group">
+                            <label>Telemetry Log Max Entries</label>
+                            <input type="number" class="setting-input" data-key="ui_telemetry_log_max_entries" min="10" max="500">
+                        </div>
+                        <div class="setting-group">
+                            <label>Error Banner Auto-Hide (ms)</label>
+                            <input type="number" class="setting-input" data-key="ui_error_banner_auto_hide_ms" min="1000" max="30000" step="500">
+                        </div>
+                        <div class="setting-group">
+                            <label>Task Poll Interval (ms)</label>
+                            <input type="number" class="setting-input" data-key="ui_task_poll_interval_ms" min="500" max="10000" step="100">
+                        </div>
+                        <div class="setting-group">
+                            <label>Task Poll Max Attempts</label>
+                            <input type="number" class="setting-input" data-key="ui_task_poll_max_attempts" min="1" max="300">
+                        </div>
+                        <div class="setting-group">
+                            <label>Theme</label>
+                            <select class="setting-input infer-select" data-key="ui_theme">
+                                <option value="dark">Dark</option>
+                                <option value="light">Light</option>
+                                <option value="auto">Auto</option>
+                            </select>
+                        </div>
+                        <div class="setting-group">
+                            <label>Font Size</label>
+                            <select class="setting-input infer-select" data-key="ui_font_size">
+                                <option value="small">Small</option>
+                                <option value="medium">Medium</option>
+                                <option value="large">Large</option>
+                            </select>
+                        </div>
+                        <div class="setting-group">
+                            <label>Enable SSE Stream</label>
+                            <label class="toggle"><input type="checkbox" class="setting-input" data-key="ui_enable_sse_stream"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div class="setting-group">
+                            <label>Auto Refresh</label>
+                            <label class="toggle"><input type="checkbox" class="setting-input" data-key="ui_auto_refresh"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div class="setting-group">
+                            <label>Show GPU Bars</label>
+                            <label class="toggle"><input type="checkbox" class="setting-input" data-key="ui_show_gpu_bars"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div class="setting-group">
+                            <label>Show Agent Stats</label>
+                            <label class="toggle"><input type="checkbox" class="setting-input" data-key="ui_show_agent_stats"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div class="setting-group">
+                            <label>Compact Mode</label>
+                            <label class="toggle"><input type="checkbox" class="setting-input" data-key="ui_compact_mode"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div class="setting-group">
+                            <label>Date Format</label>
+                            <select class="setting-input infer-select" data-key="ui_date_format">
+                                <option value="24h">24-hour</option>
+                                <option value="12h">12-hour</option>
+                            </select>
+                        </div>
+                        <div class="setting-group">
+                            <label>Language</label>
+                            <select class="setting-input infer-select" data-key="ui_language">
+                                <option value="en">English</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Telemetry Tab -->
+                <div class="settings-section" data-section="telemetry">
+                    <div class="settings-grid">
+                        <div class="setting-group">
+                            <label>Output Directory</label>
+                            <input type="text" class="setting-input" data-key="telemetry_output_dir" placeholder="telemetry_logs">
+                        </div>
+                        <div class="setting-group">
+                            <label>SSE Heartbeat (seconds)</label>
+                            <input type="number" class="setting-input" data-key="telemetry_sse_heartbeat_seconds" min="1" max="60">
+                        </div>
+                        <div class="setting-group">
+                            <label>History Limit</label>
+                            <input type="number" class="setting-input" data-key="telemetry_history_limit" min="10" max="10000">
+                        </div>
+                        <div class="setting-group">
+                            <label>Enable Disk Logging</label>
+                            <label class="toggle"><input type="checkbox" class="setting-input" data-key="telemetry_enable_disk_logging"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div class="setting-group">
+                            <label>Enable Memory Buffer</label>
+                            <label class="toggle"><input type="checkbox" class="setting-input" data-key="telemetry_enable_memory_buffer"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div class="setting-group">
+                            <label>Memory Buffer Size</label>
+                            <input type="number" class="setting-input" data-key="telemetry_memory_buffer_size" min="100" max="10000">
+                        </div>
+                        <div class="setting-group">
+                            <label>Log Agent Lifecycle</label>
+                            <label class="toggle"><input type="checkbox" class="setting-input" data-key="telemetry_log_agent_lifecycle"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div class="setting-group">
+                            <label>Log Task Lifecycle</label>
+                            <label class="toggle"><input type="checkbox" class="setting-input" data-key="telemetry_log_task_lifecycle"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div class="setting-group">
+                            <label>Log Routing Decisions</label>
+                            <label class="toggle"><input type="checkbox" class="setting-input" data-key="telemetry_log_routing_decisions"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div class="setting-group">
+                            <label>Log Performance Metrics</label>
+                            <label class="toggle"><input type="checkbox" class="setting-input" data-key="telemetry_log_performance_metrics"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div class="setting-group">
+                            <label>Batch Write Interval (seconds)</label>
+                            <input type="number" class="setting-input" data-key="telemetry_batch_write_interval_seconds" min="1" max="300">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Discovery Tab -->
+                <div class="settings-section" data-section="discovery">
+                    <div class="settings-grid">
+                        <div class="setting-group">
+                            <label>Scan Interval (seconds)</label>
+                            <input type="number" class="setting-input" data-key="discovery_scan_interval_seconds" min="5" max="3600">
+                        </div>
+                        <div class="setting-group">
+                            <label>Ping Timeout (seconds)</label>
+                            <input type="number" class="setting-input" data-key="discovery_ping_timeout_seconds" min="1" max="30">
+                        </div>
+                        <div class="setting-group">
+                            <label>Max Nodes</label>
+                            <input type="number" class="setting-input" data-key="discovery_max_nodes" min="1" max="500">
+                        </div>
+                        <div class="setting-group">
+                            <label>Enable mDNS</label>
+                            <label class="toggle"><input type="checkbox" class="setting-input" data-key="discovery_enable_mdns"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div class="setting-group">
+                            <label>Enable Broadcast</label>
+                            <label class="toggle"><input type="checkbox" class="setting-input" data-key="discovery_enable_broadcast"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div class="setting-group">
+                            <label>Broadcast Port</label>
+                            <input type="number" class="setting-input" data-key="discovery_broadcast_port" min="1024" max="65535">
+                        </div>
+                        <div class="setting-group">
+                            <label>Node Timeout (seconds)</label>
+                            <input type="number" class="setting-input" data-key="discovery_node_timeout_seconds" min="10" max="3600">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Security Tab -->
+                <div class="settings-section" data-section="security">
+                    <div class="settings-grid">
+                        <div class="setting-group">
+                            <label>Enable API Key Auth</label>
+                            <label class="toggle"><input type="checkbox" class="setting-input" data-key="enable_api_key_auth"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div class="setting-group full">
+                            <label>API Key</label>
+                            <input type="password" class="setting-input" data-key="api_key" placeholder="sk-...">
+                        </div>
+                        <div class="setting-group">
+                            <label>Enable Rate Limiting</label>
+                            <label class="toggle"><input type="checkbox" class="setting-input" data-key="enable_rate_limiting"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div class="setting-group">
+                            <label>Rate Limit (req/min)</label>
+                            <input type="number" class="setting-input" data-key="rate_limit_requests_per_minute" min="1" max="10000">
+                        </div>
+                        <div class="setting-group">
+                            <label>Require HTTPS</label>
+                            <label class="toggle"><input type="checkbox" class="setting-input" data-key="require_https"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div class="setting-group">
+                            <label>Max Request Body (MB)</label>
+                            <input type="number" class="setting-input" data-key="max_request_body_size_mb" min="1" max="500">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Advanced Tab -->
+                <div class="settings-section" data-section="advanced">
+                    <div class="settings-grid">
+                        <div class="setting-group">
+                            <label>Debug Mode</label>
+                            <label class="toggle"><input type="checkbox" class="setting-input" data-key="debug"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div class="setting-group">
+                            <label>Log Level</label>
+                            <select class="setting-input infer-select" data-key="log_level">
+                                <option value="DEBUG">DEBUG</option>
+                                <option value="INFO">INFO</option>
+                                <option value="WARNING">WARNING</option>
+                                <option value="ERROR">ERROR</option>
+                            </select>
+                        </div>
+                        <div class="setting-group">
+                            <label>Enable Response Cache</label>
+                            <label class="toggle"><input type="checkbox" class="setting-input" data-key="enable_response_cache"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div class="setting-group">
+                            <label>Cache Max Entries</label>
+                            <input type="number" class="setting-input" data-key="cache_max_entries" min="10" max="10000">
+                        </div>
+                        <div class="setting-group">
+                            <label>Cache TTL (seconds)</label>
+                            <input type="number" class="setting-input" data-key="cache_ttl_seconds" min="10" max="86400">
+                        </div>
+                        <div class="setting-group">
+                            <label>Cache Similarity Threshold</label>
+                            <input type="number" class="setting-input" data-key="cache_similarity_threshold" min="0" max="1" step="0.01">
+                        </div>
+                        <div class="setting-group">
+                            <label>SITK Chunk Size (bytes)</label>
+                            <input type="number" class="setting-input" data-key="sitk_chunk_size_bytes" min="1024" max="104857600">
+                        </div>
+                        <div class="setting-group">
+                            <label>SITK Max Transfer Retries</label>
+                            <input type="number" class="setting-input" data-key="sitk_max_transfer_retries" min="0" max="10">
+                        </div>
+                        <div class="setting-group">
+                            <label>SITK Transfer Timeout (seconds)</label>
+                            <input type="number" class="setting-input" data-key="sitk_transfer_timeout_seconds" min="10" max="3600">
+                        </div>
+                        <div class="setting-group">
+                            <label>SITK Enable Compression</label>
+                            <label class="toggle"><input type="checkbox" class="setting-input" data-key="sitk_enable_compression"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div class="setting-group">
+                            <label>SITK Compression Level</label>
+                            <input type="number" class="setting-input" data-key="sitk_compression_level" min="0" max="9">
+                        </div>
+                        <div class="setting-group">
+                            <label>SITK Verify Checksum</label>
+                            <label class="toggle"><input type="checkbox" class="setting-input" data-key="sitk_verify_checksum"><span class="toggle-slider"></span></label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-footer">
+                <button id="btnSaveSettings" class="btn btn-green">💾 Save Settings</button>
+                <button id="btnResetSettings" class="btn btn-red">↺ Factory Reset</button>
+                <button id="btnExportSettings" class="btn">📤 Export JSON</button>
+                <button id="btnImportSettings" class="btn">📥 Import JSON</button>
+                <input type="file" id="importFileInput" accept=".json" style="display:none;">
+                <span id="settingsStatus" class="settings-status"></span>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Error Banner -->
+        <div id="errorBanner" class="error-banner"></div>
+
+        <!-- Main Breaker Panel -->
+        <div class="card breaker-panel">
+            <div class="card-title">🏠 Main Breaker Panel</div>
+            <div class="breaker-labels" id="breakerLabels">
+                <span style="color:var(--accent-green)">☀️ LOCAL</span>
+                <span style="color:var(--accent-yellow)">⚡ AUTO</span>
+                <span style="color:var(--accent-red)">☁️ CLOUD</span>
+            </div>
+            <div class="breaker-slider-wrap">
+                <input type="range" id="breakerSlider" min="0" max="100" value="50">
+                <div class="breaker-value" id="breakerValue">0.50</div>
+            </div>
+            <div class="breaker-buttons">
+                <button id="btnLocal" class="btn btn-green">☀️ Local</button>
+                <button id="btnAuto" class="btn active">⚖️ Auto</button>
+                <button id="btnCloud" class="btn btn-red">☁️ Cloud</button>
+            </div>
+            <div class="tier-grid" id="tierGrid">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+
+        <!-- System Metrics -->
+        <div class="card">
+            <div class="card-title">📊 System Metrics</div>
+            <div class="metrics-grid">
+                <div class="metric-item">
+                    <div class="metric-value" id="metricTotal">--</div>
+                    <div class="metric-label">Agents Total</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-value" id="metricActive">--</div>
+                    <div class="metric-label">Active</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-value" id="metricIdle">--</div>
+                    <div class="metric-label">Idle</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-value" id="metricPending">--</div>
+                    <div class="metric-label">Pending Tasks</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-value" id="metricCompleted">--</div>
+                    <div class="metric-label">Completed</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Two Column: Agents + Nodes -->
+        <div class="two-col">
+            <div class="card">
+                <div class="card-title">👷 Agent Grid</div>
+                <div class="agent-list" id="agentList">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">🖥️ Node Map</div>
+                <div class="node-list" id="nodeList">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Telemetry -->
+        <div class="card">
+            <div class="card-title">📡 Telemetry Stream</div>
+            <div class="telemetry-log" id="telemetryLog">
+                <div class="log-entry"><span class="log-time">--:--:--</span><span class="log-type">SYSTEM</span><span class="log-msg">Waiting for data...</span></div>
+            </div>
+        </div>
+
+        <!-- AI Chat -->
+        <div class="card chat-card">
+            <div class="chat-header">
+                <div class="chat-header-left">
+                    <div class="card-title">💬 AI Chat</div>
+                    <div class="conversation-bar">
+                        <select id="conversationSelect" class="infer-select conversation-select">
+                            <option value="">New conversation...</option>
+                        </select>
+                        <button id="btnNewConv" class="btn btn-sm" title="New conversation">➕ New</button>
+                        <button id="btnRenameConv" class="btn btn-sm" title="Rename">✏️</button>
+                        <button id="btnDeleteConv" class="btn btn-sm" title="Delete">🗑️</button>
+                    </div>
+                </div>
+                <div class="chat-controls">
+                    <select id="inferModel" class="infer-select">
+                        <option value="">Loading models...</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Mode selector -->
+            <div class="mode-tabs">
+                <button class="mode-tab active" data-mode="agent" title="General assistant">🤖 Agent</button>
+                <button class="mode-tab" data-mode="plan" title="Step-by-step planning">📋 Plan</button>
+                <button class="mode-tab" data-mode="research" title="Deep research">🔬 Research</button>
+                <button class="mode-tab" data-mode="swarm_code" title="Code generation">💻 Swarm Code</button>
+                <button class="mode-tab" data-mode="debug" title="Debug & fix">🐛 Debug</button>
+                <button class="mode-tab" data-mode="auto" title="Auto-detect best mode">✨ Auto</button>
+            </div>
+
+            <!-- Chat messages -->
+            <div class="chat-messages" id="chatMessages">
+                <div class="chat-welcome">
+                    <div class="chat-welcome-icon">🤖</div>
+                    <div class="chat-welcome-text">SimplePod Swarm is ready.</div>
+                    <div class="chat-welcome-sub">Select a mode above and start chatting. Your conversation history is remembered.</div>
+                </div>
+            </div>
+
+            <!-- Thinking indicator (hidden by default) -->
+            <div class="chat-thinking" id="chatThinking" style="display:none;">
+                <div class="thinking-dot"></div>
+                <div class="thinking-dot"></div>
+                <div class="thinking-dot"></div>
+                <span id="thinkingText">Thinking...</span>
+            </div>
+
+            <!-- Input area -->
+            <form id="chatForm" class="chat-input-row">
+                <textarea id="chatInput" placeholder="Type a message..." rows="1"></textarea>
+                <button type="submit" class="btn btn-send" id="btnSend">➤</button>
+            </form>
+
+            <!-- Temperature slider (compact) -->
+            <div class="chat-footer">
+                <div class="slider-row" style="gap:0.5rem;">
+                    <label style="font-size:0.7rem;">Temp: <span id="tempValue">0.7</span></label>
+                    <input type="range" id="inferTemp" min="0" max="20" value="7" style="flex:1;max-width:120px;">
+                </div>
+                <div class="chat-status" id="chatStatus">5 agents idle</div>
+            </div>
+        </div>
+
+        <!-- Swarm Controls -->
+        <div class="card" style="text-align:center;">
+            <div class="card-title">🎛️ Swarm Controls</div>
+            <div class="breaker-buttons" style="justify-content:center; margin-bottom:1rem;">
+                <button id="btnActivate" class="btn btn-green">🚀 Activate Swarm</button>
+                <button id="btnShutdown" class="btn btn-red">🛑 Shutdown Swarm</button>
+            </div>
+            <div class="spawn-row">
+                <label>Spawn</label>
+                <input type="number" id="spawnCount" min="1" max="50" value="3" class="spawn-input">
+                <label>agent(s)</label>
+                <button id="btnSpawn" class="btn btn-blue">➕ Spawn</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Agent Detail Modal -->
+    <div id="agentDetailOverlay" class="settings-overlay">
+        <div class="settings-panel" style="max-width:600px;">
+            <div class="settings-header">
+                <div class="settings-title" id="agentDetailTitle">👷 Agent Detail</div>
+                <button id="btnCloseAgentDetail" class="btn btn-sm">✕ Close</button>
+            </div>
+            <div class="settings-content">
+                <div class="settings-grid">
+                    <div class="setting-group">
+                        <label>Status</label>
+                        <div id="agentDetailStatus" class="detail-value">--</div>
+                    </div>
+                    <div class="setting-group">
+                        <label>Uptime</label>
+                        <div id="agentDetailUptime" class="detail-value">--</div>
+                    </div>
+                    <div class="setting-group">
+                        <label>Tasks Completed</label>
+                        <div id="agentDetailCompleted" class="detail-value">--</div>
+                    </div>
+                    <div class="setting-group">
+                        <label>Tasks Failed</label>
+                        <div id="agentDetailFailed" class="detail-value">--</div>
+                    </div>
+                    <div class="setting-group full">
+                        <label>Current Task</label>
+                        <div id="agentDetailTask" class="detail-box">--</div>
+                    </div>
+                    <div class="setting-group full">
+                        <label>Last Heartbeat</label>
+                        <div id="agentDetailHeartbeat" class="detail-value">--</div>
+                    </div>
+                    <!-- Per-Agent Config -->
+                    <div class="setting-group full" style="border-top:1px solid var(--border);padding-top:1rem;margin-top:0.5rem;">
+                        <label>🛠️ Agent Configuration</label>
+                        <div class="settings-grid" style="margin-top:0.5rem;">
+                            <div class="setting-group">
+                                <label>Model Override</label>
+                                <select id="agentDetailModel" class="infer-select">
+                                    <option value="">Use global default</option>
+                                </select>
+                            </div>
+                            <div class="setting-group">
+                                <label>Temperature</label>
+                                <input type="number" id="agentDetailTemp" min="0" max="2" step="0.1" value="" placeholder="0.7">
+                            </div>
+                            <div class="setting-group">
+                                <label>Max Tokens</label>
+                                <input type="number" id="agentDetailMaxTokens" min="1" max="32768" step="1" value="" placeholder="2048">
+                            </div>
+                        </div>
+                        <button id="btnSaveAgentConfig" class="btn btn-green" style="margin-top:0.5rem;">💾 Save Config</button>
+                        <span id="agentConfigStatus" class="settings-status"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="settings-footer">
+                <button id="btnKillAgent" class="btn btn-red">💀 Kill Agent</button>
+                <button id="btnRemoveAgent" class="btn btn-red" style="display:none;">🗑️ Remove Dead Agent</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>

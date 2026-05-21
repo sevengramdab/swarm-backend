@@ -1,0 +1,24 @@
+# Don't pack these into the Docker image
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.git/
+.gitignore
+ark_backups/
+telemetry_logs/
+context_checkpoints/
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+node_modules/
+.web/
