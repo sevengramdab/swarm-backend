@@ -89,7 +89,8 @@ package-lock.json
 yarn.lock
 pnpm-lock.yaml
 .web/
-frontend/
+/frontend/
+!/interfaces/web_ui/frontend/
 *.log
 
 # ── Operating System ──────────────────────────────────────────────────────────
@@ -185,9 +186,7 @@ tailscale.state
 /todo_cli.py
 /drone_weather.py
 /generate_diagram.py
-/project_launcher.py
 
-# Backtick-named files from LLM parsing
 # Screenshots and temp images
 /screen_*.png
 /remote_screenshot*.png

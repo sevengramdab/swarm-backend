@@ -31,6 +31,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Callable
 from threading import Thread, Event
 
+from .plan_creator import PlanCreator, CreatedPlan
+from .react_agent import ReActAgent, ReActTask
+
 
 # ---------------------------------------------------------------------------
 # File System Tool
@@ -512,8 +515,12 @@ class SwarmCoder:
         self.llm = LLMTool(ollama_host, model)
         self.planner = ReactivePlanner(self.llm, self.fs)
         self.executor = PlanExecutor(self.fs, self.shell)
+        self.plan_creator = PlanCreator(self.llm)
+        self.react_agent = ReActAgent(self.llm, self.fs, self.shell, str(self.project_dir))
         self.tasks: Dict[str, CoderTask] = {}
         self._stop_events: Dict[str, Event] = {}
+        self._react_tasks: Dict[str, ReActTask] = {}
+        self._react_stop_events: Dict[str, Event] = {}
 
     def submit_task(self, goal: str) -> CoderTask:
         task_id = str(uuid.uuid4())[:8]
@@ -529,6 +536,65 @@ class SwarmCoder:
         thread = Thread(target=self._run_task, args=(task_id,), daemon=True)
         thread.start()
         return task
+
+    # ------------------------------------------------------------------
+    # Plan Creator
+    # ------------------------------------------------------------------
+
+    def create_plan(self, goal: str) -> CreatedPlan:
+        """Generate a multi-option plan for the user to choose from."""
+        return self.plan_creator.create_plan(goal)
+
+    def get_plan(self, plan_id: str) -> Optional[CreatedPlan]:
+        return self.plan_creator.get_plan(plan_id)
+
+    def execute_plan(self, plan_id: str, option_id: str) -> Optional[CoderTask]:
+        """Execute the chosen plan option as a new task."""
+        plan = self.plan_creator.select_option(plan_id, option_id)
+        if not plan:
+            return None
+
+        # Build a detailed goal from the chosen option
+        selected = next((o for o in plan.options if o.option_id == option_id), None)
+        if not selected:
+            return None
+
+        detailed_goal = f"{plan.goal}\n\nApproach: {selected.approach}\nDescription: {selected.description}"
+        plan.status = "executing"
+        task = self.submit_task(detailed_goal)
+        plan.task_id = task.task_id
+        return task
+
+    # ------------------------------------------------------------------
+    # ReAct Agent (multi-turn tool use)
+    # ------------------------------------------------------------------
+
+    def submit_react_task(self, goal: str) -> ReActTask:
+        """Submit a task that uses the ReAct multi-turn tool loop."""
+        task_id = str(uuid.uuid4())[:8]
+        task = ReActTask(task_id=task_id, goal=goal)
+        self._react_tasks[task_id] = task
+        self._react_stop_events[task_id] = Event()
+        thread = Thread(target=self.react_agent.run, args=(task, self._react_stop_events[task_id]), daemon=True)
+        thread.start()
+        return task
+
+    def get_react_task(self, task_id: str) -> Optional[ReActTask]:
+        return self._react_tasks.get(task_id)
+
+    def stop_react_task(self, task_id: str) -> bool:
+        ev = self._react_stop_events.get(task_id)
+        if ev:
+            ev.set()
+            return True
+        return False
+
+    def list_react_tasks(self) -> List[ReActTask]:
+        return sorted(self._react_tasks.values(), key=lambda t: t.created_at, reverse=True)
+
+    # ------------------------------------------------------------------
+    # Remote routing
+    # ------------------------------------------------------------------
 
     def _try_route_remote(self, task_id: str, goal: str) -> Optional[CoderTask]:
         """Check if this task should run on a remote node with a larger model."""
