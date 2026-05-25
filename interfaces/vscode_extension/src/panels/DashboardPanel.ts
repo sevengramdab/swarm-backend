@@ -200,13 +200,3 @@ export class DashboardPanel {
         }
     }
 }
-
-    public dispose(): void {
-        DashboardPanel.currentPanel = undefined;
-        this._panel.dispose();
-        while (this._disposables.length) {
-            const x = this._disposables.pop();
-            if (x) { x.dispose(); }
-        }
-    }
-}

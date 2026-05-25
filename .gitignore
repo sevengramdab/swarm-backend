@@ -162,3 +162,47 @@ tailscale.state
 .cache/
 *.prof
 *.lprof
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SwarmCoder Generated Artifacts (do not commit auto-generated apps/tests)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Root-level generated Python files (SwarmCoder test outputs)
+/app.py
+/config.py
+/models.py
+/routes.py
+/services.py
+/tests.py
+/utils.py
+/auth.py
+/database.py
+/requirements.txt
+/hello_world.py
+/password_gen.py
+/stock_analyzer.py
+/reverse_string.py
+/todo_cli.py
+/drone_weather.py
+/generate_diagram.py
+/project_launcher.py
+
+# Backtick-named files from LLM parsing
+# Screenshots and temp images
+/screen_*.png
+/remote_screenshot*.png
+/orbstudio_swarm_architecture.png
+
+# Test prompts and temp files
+/ONE_CLICK_TEST_PROMPT.txt
+/SWARM_TEST_PROMPT.md
+/payload.json
+/task_payload.json
+/todo.json
+/chinese_lines.txt
+/remaining_chinese.txt
+/test_api_task.py
+/test_fallbacks.py
+/test_submit.py
+/tmp_*.js
+/setup.py (optional)

@@ -69,6 +69,8 @@ class Task:
     finished_at: Optional[float] = None
     retry_count: int = 0
     max_retries: int = 3
+    rescue_count: int = 0
+    max_rescues: int = 3
 
 
 @dataclass
@@ -165,6 +167,7 @@ class MassAgentOrchestrator:
         self.pending_queue: Queue[Task] = Queue()
         self.completed_tasks: Dict[str, Task] = {}
         self.failed_tasks: Dict[str, Task] = {}
+        self._completed_task_ids: Set[str] = set()
 
         # Agent registry
         self.agents: Dict[str, AgentState] = {}
@@ -399,6 +402,23 @@ class MassAgentOrchestrator:
 
             try:
                 result = self.worker_fn(task)
+
+                # Guard against double-completion when multiple agents race the same task.
+                with self._lock:
+                    already_done = task.id in self._completed_task_ids
+                    if not already_done:
+                        self._completed_task_ids.add(task.id)
+
+                if already_done:
+                    logger.info(f"{agent_id} finished task {task.id} but another agent already completed it — discarding")
+                    with self._lock:
+                        agent = self.agents.get(agent_id)
+                        if agent:
+                            agent.tasks_completed += 1
+                            agent.last_heartbeat = time.time()
+                            agent.task = None
+                    continue
+
                 task.result = result
                 task.status = TaskStatus.COMPLETED
                 task.finished_at = time.time()
@@ -454,22 +474,36 @@ class MassAgentOrchestrator:
             with self._lock:
                 agents_snapshot = list(self.agents.values())
 
-            hung: List[str] = []
             for agent in agents_snapshot:
                 if not agent.alive:
                     continue
-                # If agent has been running a task too long without finishing
+                # If agent has been running a task too long without finishing,
+                # DON'T kill it — spawn a helper and requeue the task.
                 if agent.task and agent.task.started_at:
                     elapsed = now - agent.task.started_at
                     if elapsed > self.task_timeout:
-                        hung.append(agent.agent_id)
-                        continue
-                # Also check general heartbeat if idle too long? Not needed for idle.
+                        task = agent.task
+                        if task.rescue_count >= task.max_rescues:
+                            logger.warning(
+                                f"{agent.agent_id} still hung on {task.id} "
+                                f"(rescue limit {task.max_rescues} reached) — leaving it alone"
+                            )
+                            continue
 
-            for agent_id in hung:
-                self._kill_agent(agent_id, reason=f"hung for >{self.task_timeout}s")
-                if self.auto_scale:
-                    self._spawn_agent()  # Replace the dead agent
+                        task.rescue_count += 1
+                        task.status = TaskStatus.PENDING
+                        task.assigned_agent = None
+                        task.started_at = None
+                        self.pending_queue.put(task)
+                        agent.task = None  # detach so agent is free for next task
+                        self.stats["tasks_timed_out"] += 1
+                        logger.warning(
+                            f"{agent.agent_id} hung on {task.id} for {elapsed:.1f}s — "
+                            f"rescued (attempt {task.rescue_count}/{task.max_rescues})"
+                        )
+
+                        if self.auto_scale:
+                            self._spawn_agent()
 
             # Auto-scale: if queue depth per agent is high, spawn more
             if self.auto_scale:

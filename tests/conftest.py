@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+import pytest
+from simplepod import SimplePod#!/usr/bin/env python3
+# Test edit file action#!/usr/bin/env python3
 """
 conftest.py
 ===========

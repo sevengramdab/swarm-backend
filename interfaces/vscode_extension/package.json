@@ -1,8 +1,8 @@
 {
   "name": "simplepod-swarm",
   "displayName": "SimplePod Swarm Control",
-  "description": "IDE control plane for SimplePod Surgical Strike Swarm — dashboard, capture, and auto-resume",
-  "version": "0.2.0",
+  "description": "IDE control plane for SimplePod Swarm — chat, agents, nodes, and settings",
+  "version": "0.3.0",
   "publisher": "simplepod",
   "engines": {
     "vscode": "^1.85.0"
@@ -13,13 +13,7 @@
     "Other"
   ],
   "activationEvents": [
-    "onStartupFinished",
-    "onCommand:simplepod.openDashboard",
-    "onCommand:simplepod.captureScreenshot",
-    "onCommand:simplepod.activateSwarm",
-    "onCommand:simplepod.shutdownSwarm",
-    "onCommand:simplepod.setMainBreaker",
-    "onCommand:simplepod.reconnect"
+    "onStartupFinished"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -50,16 +44,22 @@
     },
     "commands": [
       {
+        "command": "simplepod.openControlPanel",
+        "title": "Open Control Panel",
+        "category": "SimplePod",
+        "icon": "$(terminal-view-icon)"
+      },
+      {
         "command": "simplepod.openDashboard",
-        "title": "Open Swarm Dashboard",
+        "title": "Open Dashboard (Webview)",
         "category": "SimplePod",
         "icon": "$(dashboard)"
       },
       {
-        "command": "simplepod.captureScreenshot",
-        "title": "Capture Dashboard for Analysis",
+        "command": "simplepod.quickChat",
+        "title": "Quick Chat",
         "category": "SimplePod",
-        "icon": "$(device-camera)"
+        "icon": "$(comment)"
       },
       {
         "command": "simplepod.activateSwarm",
@@ -74,42 +74,151 @@
         "icon": "$(stop)"
       },
       {
+        "command": "simplepod.spawnAgents",
+        "title": "Spawn Agents",
+        "category": "SimplePod",
+        "icon": "$(add)"
+      },
+      {
+        "command": "simplepod.killAgent",
+        "title": "Kill Agent",
+        "category": "SimplePod",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "simplepod.removeAgent",
+        "title": "Remove Dead Agent",
+        "category": "SimplePod",
+        "icon": "$(trash)"
+      },
+      {
         "command": "simplepod.setMainBreaker",
         "title": "Set Main Breaker Threshold",
         "category": "SimplePod",
         "icon": "$(settings)"
       },
       {
+        "command": "simplepod.captureScreenshot",
+        "title": "Capture Dashboard",
+        "category": "SimplePod",
+        "icon": "$(device-camera)"
+      },
+      {
         "command": "simplepod.reconnect",
         "title": "Reconnect to Backend",
         "category": "SimplePod",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "simplepod.remoteType",
+        "title": "Remote: Type Text",
+        "category": "SimplePod Remote",
+        "icon": "$(keyboard)"
+      },
+      {
+        "command": "simplepod.remoteClick",
+        "title": "Remote: Click Mouse",
+        "category": "SimplePod Remote",
+        "icon": "$(debug-breakpoint-log-unverified)"
+      },
+      {
+        "command": "simplepod.remoteKeys",
+        "title": "Remote: Send Keys",
+        "category": "SimplePod Remote",
+        "icon": "$(symbol-event)"
+      },
+      {
+        "command": "simplepod.remoteShell",
+        "title": "Remote: Shell Command",
+        "category": "SimplePod Remote",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "simplepod.remoteScroll",
+        "title": "Remote: Scroll Mouse",
+        "category": "SimplePod Remote",
+        "icon": "$(arrow-swap)"
+      },
+      {
+        "command": "simplepod.remoteDrag",
+        "title": "Remote: Drag Mouse",
+        "category": "SimplePod Remote",
+        "icon": "$(move)"
+      },
+      {
+        "command": "simplepod.remoteScreenshot",
+        "title": "Remote: Capture Screenshot",
+        "category": "SimplePod Remote",
+        "icon": "$(device-camera)"
       }
     ],
     "keybindings": [
       {
-        "command": "simplepod.openDashboard",
+        "command": "simplepod.openControlPanel",
         "key": "ctrl+shift+s",
         "mac": "cmd+shift+s",
         "when": "editorTextFocus"
       },
       {
-        "command": "simplepod.captureScreenshot",
-        "key": "ctrl+shift+c",
-        "mac": "cmd+shift+c",
-        "when": "simplepod:dashboardVisible"
+        "command": "simplepod.quickChat",
+        "key": "ctrl+shift+a",
+        "mac": "cmd+shift+a",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "simplepod.remoteType",
+        "key": "ctrl+shift+t",
+        "mac": "cmd+shift+t",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "simplepod.remoteShell",
+        "key": "ctrl+shift+x",
+        "mac": "cmd+shift+x",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "simplepod.remoteScreenshot",
+        "key": "ctrl+shift+i",
+        "mac": "cmd+shift+i",
+        "when": "editorTextFocus"
       }
     ],
     "menus": {
       "commandPalette": [
-        { "command": "simplepod.openDashboard" },
-        { "command": "simplepod.captureScreenshot" }
+        { "command": "simplepod.openControlPanel" },
+        { "command": "simplepod.quickChat" },
+        { "command": "simplepod.activateSwarm" },
+        { "command": "simplepod.shutdownSwarm" },
+        { "command": "simplepod.spawnAgents" }
       ],
       "view/title": [
         {
-          "command": "simplepod.openDashboard",
+          "command": "simplepod.openControlPanel",
           "when": "view == simplepod.agents",
           "group": "navigation"
+        },
+        {
+          "command": "simplepod.activateSwarm",
+          "when": "view == simplepod.agents",
+          "group": "navigation@1"
+        },
+        {
+          "command": "simplepod.spawnAgents",
+          "when": "view == simplepod.agents",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "simplepod.killAgent",
+          "when": "view == simplepod.agents && viewItem == aliveAgent",
+          "group": "inline"
+        },
+        {
+          "command": "simplepod.removeAgent",
+          "when": "view == simplepod.agents && viewItem == deadAgent",
+          "group": "inline"
         }
       ]
     }

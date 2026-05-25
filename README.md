@@ -1,167 +1,73 @@
-# SimplePod Surgical Strike Swarm v2.6
+# app.py
+from flask import Flask, jsonify, request
+from flask_sqlalchemy import SQLAlchemy
+from marshmallow import Schema, fields, validates, ValidationError
+import os
 
-> Distributed, highly resilient Agentic Swarm Architecture bridging Shadow PC, local edge hosts, stateless GPU nodes, and hybrid LLM infrastructures.
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///tasks.db'
+db = SQLAlchemy(app)
 
----
+class Task(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.String(200), nullable=True)
+    status = db.Column(db.String(20), nullable=False, default='pending')
+    created_at = db.Column(db.DateTime, nullable=False, default=db.func.current_timestamp())
 
-## Architecture Overview
+class TaskSchema(Schema):
+    title = fields.Str(required=True)
+    description = fields.Str()
+    status = fields.Str(required=True)
 
-```text
-                                ┌──────────────────────────────────────┐
-                                │         PUBLIC INTERNET              │
-                                │   (API Clients, Webhooks, SMS)       │
-                                └──────────────┬───────────────────────┘
-                                               │
-                                               ▼
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│                              FASTAPI GATEWAY (Shadow PC)                         │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐                  │
-│  │  Auth / Rate    │  │  Request Router │  │  Observability  │                  │
-│  │  Limit (GFCI)   │  │  (Main Breaker) │  │  (Panel Meter)  │                  │
-│  └────────┬────────┘  └────────┬────────┘  └─────────────────┘                  │
-│           │                    │                                                 │
-│           └────────────────────┘                                                 │
-│                          │                                                       │
-│           ┌──────────────┴──────────────┐                                       │
-│           ▼                             ▼                                       │
-│  ┌─────────────────┐          ┌─────────────────┐                               │
-│  │  WebSocket Bus  │          │  Socket.IO Bus  │                               │
-│  │  (EMT Conduit)  │          │  (PVC Conduit)  │                               │
-│  └────────┬────────┘          └────────┬────────┘                               │
-└───────────┼────────────────────────────┼──────────────────────────────────────────┘
-            │                            │
-            ▼                            ▼
-┌────────────────────────┐    ┌────────────────────────────────────────────────────┐
-│  LOCAL MSI HOST        │    │  HYBRID LLM POOL                                   │
-│  (GTX 1650 Edge)       │    │  ┌─────────────┐  ┌─────────────┐  ┌───────────┐  │
-│  ┌──────────────────┐  │    │  │ OpenAI API  │  │ Local API   │  │  Ollama   │  │
-│  │  Inference Agent │  │    │  │ (Utility)   │  │ (Generator) │  │ (Backup)  │  │
-│  │  (20A Circuit)   │  │    │  └─────────────┘  └─────────────┘  └───────────┘  │
-│  └──────────────────┘  │    └────────────────────────────────────────────────────┘
-│  Low Latency Fallback  │
-└────────────────────────┘
-            │
-            │  Tailscale / WireGuard Mesh
-            │  (The conduit run between buildings)
-            ▼
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│                         STATELESS RTX 5090 NODES (Poland)                        │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐             │
-│  │  GPU Pod 1  │  │  GPU Pod 2  │  │  GPU Pod 3  │  │  GPU Pod N  │             │
-│  │ (30A 240V)  │  │ (30A 240V)  │  │ (30A 240V)  │  │ (30A 240V)  │             │
-│  │  Ephemeral  │  │  Ephemeral  │  │  Ephemeral  │  │  Ephemeral  │             │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘             │
-│        │                │                │                │                      │
-│        └────────────────┴────────────────┴────────────────┘                      │
-│                              Auto-Scaler                                         │
-│                    (Demand Factor Controller)                                    │
-└──────────────────────────────────────────────────────────────────────────────────┘
-            │
-            ▼
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│                         PHILIPPINES DEPLOYMENT TARGET                            │
-│  ┌──────────────────────────────────────────────────────────────────────────┐   │
-│  │  Reflex UI — Paper Space Layout                                          │   │
-│  │  (What the operator sees: viewports, scaled, annotated, ready for sign)  │   │
-│  └──────────────────────────────────────────────────────────────────────────┘   │
-└──────────────────────────────────────────────────────────────────────────────────┘
-```
+@app.route('/tasks', methods=['GET'])
+def get_tasks():
+    tasks = Task.query.all()
+    return jsonify([task.to_dict() for task in tasks])
 
----
+@app.route('/tasks', methods=['POST'])
+def create_task():
+    schema = TaskSchema()
+    try:
+        data = schema.load(request.json)
+    except ValidationError as err:
+        return jsonify({'error': 'Invalid request'}), 400
+    new_task = Task(title=data['title'], description=data.get('description'), status=data['status'])
+    db.session.add(new_task)
+    db.session.commit()
+    return jsonify(new_task.to_dict()), 201
 
-## Quick Start
+@app.route('/tasks/<int:task_id>', methods=['GET'])
+def get_task(task_id):
+    task = Task.query.get(task_id)
+    if not task:
+        return jsonify({'error': 'Task not found'}), 404
+    return jsonify(task.to_dict())
 
-### 1. Clone & Enter
+@app.route('/tasks/<int:task_id>', methods=['PUT'])
+def update_task(task_id):
+    task = Task.query.get(task_id)
+    if not task:
+        return jsonify({'error': 'Task not found'}), 404
+    schema = TaskSchema()
+    try:
+        data = schema.load(request.json)
+    except ValidationError as err:
+        return jsonify({'error': 'Invalid request'}), 400
+    task.title = data['title']
+    task.description = data.get('description')
+    task.status = data['status']
+    db.session.commit()
+    return jsonify(task.to_dict())
 
-```bash
-git clone https://github.com/simplepod/swarm.git
-cd simplepod_swarm
-```
+@app.route('/tasks/<int:task_id>', methods=['DELETE'])
+def delete_task(task_id):
+    task = Task.query.get(task_id)
+    if not task:
+        return jsonify({'error': 'Task not found'}), 404
+    db.session.delete(task)
+    db.session.commit()
+    return jsonify({'message': 'Task deleted'})
 
-### 2. Create Virtual Environment
-
-```bash
-python -m venv .venv
-source .venv/bin/activate  # Linux/macOS
-# or
-.venv\Scripts\activate    # Windows
-```
-
-### 3. Install Dependencies
-
-```bash
-pip install -e ".[dev]"
-```
-
-### 4. Configure Environment
-
-```bash
-cp .env.example .env
-# Edit .env with your Tailscale auth key, Twilio creds, and node topology.
-```
-
-### 5. Run the Gateway
-
-```bash
-uvicorn simplepod.api.gateway:app --reload --host 0.0.0.0 --port 8000
-```
-
-### 6. Run the Reflex UI (in another terminal)
-
-```bash
-reflex run
-```
-
----
-
-## Module Index
-
-| Module | Path | Purpose |
-|--------|------|---------|
-| **Gateway** | `src/simplepod/api/gateway.py` | FastAPI entry point — the "front panel" where all requests land. |
-| **Router** | `src/simplepod/core/router.py` | Load balancer and inference router — the "main breaker." |
-| **Circuit Breaker** | `src/simplepod/core/breaker.py` | Failure isolation logic — like a GFCI that trips on fault. |
-| **Node Pool** | `src/simplepod/core/node_pool.py` | Registry of active GPU nodes — the "panel schedule." |
-| **Inference Agent** | `src/simplepod/agents/inference.py` | Handles LLM requests — a "20A circuit" dedicated to one load. |
-| **Provisioning Agent** | `src/simplepod/agents/provision.py` | Spins up/down RTX 5090 nodes — the "demand factor controller." |
-| **WebSocket Bus** | `src/simplepod/transport/websocket.py` | Real-time node communication — "EMT conduit between panels." |
-| **Socket.IO Bus** | `src/simplepod/transport/socketio.py` | Fallback real-time transport — "PVC conduit for wet locations." |
-| **Twilio Bridge** | `src/simplepod/transport/twilio.py` | SMS/voice command interface — "the intercom system." |
-| **Reflex UI** | `src/simplepod/ui/app.py` | Operator dashboard — "paper space layout with viewports." |
-| **Tailscale Mesh** | `src/simplepod/infra/tailscale.py` | VPN mesh management — "the underground conduit run." |
-| **Cloud Init** | `src/simplepod/infra/cloud_init.py` | Node bootstrap scripts — "the service entrance wiring diagram." |
-
----
-
-## Development Workflow
-
-```bash
-# Format & lint (like cleaning your drawing before the client sees it)
-ruff check src tests
-ruff format src tests
-
-# Type check (like verifying dimensions before plot)
-mypy src
-
-# Run tests (like doing a load calculation before energizing the panel)
-pytest
-
-# Run with coverage (like verifying every outlet is grounded)
-pytest --cov=src/simplepod --cov-report=html
-```
-
----
-
-## Backup Protocol
-
-> Before modifying ANY file, create a timestamped backup in `E:/ark_backups` (preferred) or `./ark_backups/` (fallback).
-
-Format: `YYYY-MM-DD_HHMM_PST_<filename>`
-
-See [`AGENTS.md`](./AGENTS.md) §4 for the full protocol.
-
----
-
-## License
-
-MIT © SimplePod Swarm Maintainers
+if __name__ == '__main__':
+    app.run(debug=True)
