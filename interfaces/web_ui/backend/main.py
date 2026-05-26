@@ -69,18 +69,30 @@ async def lifespan(app: FastAPI):
     try:
         from core.simpleswarm.remote_client import get_remote_pool
         import yaml
+        import socket
         config_path = Path(__file__).parent.parent.parent.parent / "config.yaml"
         if config_path.exists():
             with open(config_path, "r") as f:
                 cfg = yaml.safe_load(f)
             nodes_cfg = cfg.get("nodes", {})
             pool = get_remote_pool()
+            # Detect which node WE are by hostname or env override
+            my_hostname = socket.gethostname().lower()
+            my_node_id = os.environ.get("SIMPLEPOD_NODE_ID", "").lower()
             for node_id, node_data in nodes_cfg.items():
                 if node_data.get("status") != "active":
                     continue
+                node_hostname = node_data.get("hostname", "").lower()
+                # Skip ourselves (match by hostname or explicit NODE_ID)
+                if my_node_id and node_id.lower() == my_node_id:
+                    print(f"[mesh] Skipping self-registration: {node_id}")
+                    continue
+                if not my_node_id and node_hostname == my_hostname:
+                    print(f"[mesh] Detected self as {node_id} ({my_hostname}) — skipping self-registration")
+                    continue
                 ip = node_data.get("ip", "")
                 if not ip or ip.startswith("127.") or ip == "localhost":
-                    continue  # Skip local node
+                    continue
                 endpoint = f"http://{ip}:8000"
                 vram = node_data.get("vram_mb", 0)
                 gpu = node_data.get("gpu_type", "unknown")
