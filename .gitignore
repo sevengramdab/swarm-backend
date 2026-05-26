@@ -205,3 +205,8 @@ tailscale.state
 /test_submit.py
 /tmp_*.js
 /setup.py (optional)
+
+# Workspaces and nested repos
+shadow_workspace/
+remote_workspace/
+simpleswarm-repo/
