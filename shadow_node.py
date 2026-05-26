@@ -17,6 +17,7 @@ from pydantic import BaseModel
 import uvicorn
 
 from core.simpleswarm.swarm_coder import SwarmCoder
+from interfaces.web_ui.backend.routers.remote import router as remote_router
 
 app = FastAPI(title="SimplePod Shadow PC (RTX 3080)")
 app.add_middleware(
@@ -25,6 +26,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(remote_router)
 
 # Shadow PC workspace
 SHADOW_WORKSPACE = os.path.join(PROJECT_ROOT, "shadow_workspace")

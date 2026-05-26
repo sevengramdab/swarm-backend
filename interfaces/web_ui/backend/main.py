@@ -17,13 +17,15 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from pathlib import Path
+import threading
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .dependencies import init_dependencies
-from .routers import nodes, remote, routing, settings as settings_router, sitk, swarm, telemetry, orbstudio, screenshot, hardware, simpleswarm, swarm_coder, mesh, projects
+from .routers import nodes, remote, routing, settings as settings_router, sitk, swarm, telemetry, orbstudio, screenshot, hardware, simpleswarm, swarm_coder, mesh, projects, mesh_remote
 from .settings_store import get_settings as _get_settings
 
 
@@ -93,6 +95,8 @@ async def lifespan(app: FastAPI):
                 ip = node_data.get("ip", "")
                 if not ip or ip.startswith("127.") or ip == "localhost":
                     continue
+                if not ip or ip.startswith("127.") or ip == "localhost":
+                    continue
                 endpoint = f"http://{ip}:8000"
                 vram = node_data.get("vram_mb", 0)
                 gpu = node_data.get("gpu_type", "unknown")
@@ -108,6 +112,43 @@ async def lifespan(app: FastAPI):
                 print(f"[mesh] Auto-registered {node_id} @ {endpoint} — VRAM: {vram}MB — {'healthy' if healthy else 'unreachable'}")
     except Exception as e:
         print(f"[mesh] Auto-registration from config.yaml failed: {e}")
+
+    # Start continuous mesh discovery in a background thread.
+    # Nodes announce themselves via UDP multicast and listen for peers.
+    def _discovery_loop():
+        import threading
+        import time
+        try:
+            from bridge.mesh.node_registry import announce_presence, discover_nodes
+            from core.simpleswarm.remote_client import get_remote_pool
+            print("[mesh] Starting continuous discovery loop...")
+            while True:
+                try:
+                    announce_presence()
+                    peers = discover_nodes(timeout=3.0)
+                    pool = get_remote_pool()
+                    for peer in peers:
+                        nid = peer.get("node_id")
+                        if not nid or nid in pool.nodes:
+                            continue
+                        endpoint = peer.get("endpoint", "")
+                        if not endpoint:
+                            continue
+                        pool.register(
+                            node_id=nid,
+                            base_url=endpoint,
+                            name=peer.get("name", nid),
+                            tier=peer.get("tier", "shadow"),
+                            vram_mb=peer.get("vram_mb", 0),
+                        )
+                        print(f"[mesh] Auto-discovered peer: {nid} @ {endpoint}")
+                except Exception as e:
+                    pass
+                time.sleep(15)
+        except ImportError:
+            print("[mesh] Discovery module not available, skipping auto-discovery")
+
+    threading.Thread(target=_discovery_loop, daemon=True).start()
 
     main_breaker = MainBreaker(
         tier_manager=tier_manager,
@@ -220,6 +261,7 @@ def create_app() -> FastAPI:
     app.include_router(swarm_coder.router)
     app.include_router(projects.router)
     app.include_router(mesh.router)
+    app.include_router(mesh_remote.router)
 
     # Serve the static dashboard (replaces broken Streamlit).
     static_dir = Path(__file__).parent.parent / "static"

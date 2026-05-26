@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { LayoutDashboard, MessageSquare, Boxes, Server, Settings, PanelLeft, PanelLeftOpen, Zap, Bot, FileCode, Rocket, Globe, Wrench } from 'lucide-react'
+import { LayoutDashboard, MessageSquare, Boxes, Server, Settings, PanelLeft, PanelLeftOpen, Zap, Bot, FileCode, Rocket, Globe, Wrench, Gamepad2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
@@ -14,6 +14,7 @@ const navItems = [
   { name: 'SwarmCoder', path: '/swarmcoder', icon: FileCode },
   { name: 'Projects', path: '/projects', icon: Rocket },
   { name: 'Mesh', path: '/mesh', icon: Globe },
+  { name: 'Mesh Remote', path: '/mesh-remote', icon: Gamepad2 },
   { name: 'Tools', path: '/tools', icon: Wrench },
   { name: 'Settings', path: '/settings', icon: Settings },
 ]

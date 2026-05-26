@@ -12,6 +12,7 @@ import { SwarmCoder } from '@/pages/SwarmCoder'
 import { Projects } from '@/pages/Projects'
 import { Mesh } from '@/pages/Mesh'
 import { Tools } from '@/pages/Tools'
+import { MeshRemote } from '@/pages/MeshRemote'
 
 export default function App() {
   return (
@@ -29,6 +30,7 @@ export default function App() {
           <Route path="/projects" element={<Projects />} />
           <Route path="/mesh" element={<Mesh />} />
           <Route path="/tools" element={<Tools />} />
+          <Route path="/mesh-remote" element={<MeshRemote />} />
         </Routes>
       </Layout>
     </ToastContextProvider>
