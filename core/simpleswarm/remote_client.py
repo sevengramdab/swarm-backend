@@ -18,11 +18,12 @@ from typing import Optional, Dict, Any
 class RemoteNodeClient:
     """Client for talking to another SimplePod instance."""
 
-    def __init__(self, base_url: str, node_id: str, name: str = "", tier: str = "shadow"):
+    def __init__(self, base_url: str, node_id: str, name: str = "", tier: str = "shadow", vram_mb: int = 0):
         self.base_url = base_url.rstrip("/")
         self.node_id = node_id
         self.name = name or node_id
         self.tier = tier
+        self.vram_mb = vram_mb
         self._last_health_check = 0.0
         self._healthy = False
         self._latency_ms = 9999.0
@@ -88,6 +89,7 @@ class RemoteNodeClient:
             "name": self.name,
             "endpoint": self.base_url,
             "tier": self.tier,
+            "vram_mb": self.vram_mb,
             "status": "online" if self.is_healthy else "offline",
             "latency_ms": self._latency_ms if self.is_healthy else 9999,
             "last_seen": self._last_health_check,
@@ -103,8 +105,8 @@ class RemoteNodePool:
         self._local_task_count = 0
         self._remote_task_count = 0
 
-    def register(self, node_id: str, base_url: str, name: str = "", tier: str = "shadow") -> RemoteNodeClient:
-        client = RemoteNodeClient(base_url, node_id, name=name, tier=tier)
+    def register(self, node_id: str, base_url: str, name: str = "", tier: str = "shadow", vram_mb: int = 0) -> RemoteNodeClient:
+        client = RemoteNodeClient(base_url, node_id, name=name, tier=tier, vram_mb=vram_mb)
         self.nodes[node_id] = client
         return client
 
@@ -114,17 +116,32 @@ class RemoteNodePool:
     def get_healthy_nodes(self) -> list:
         return [c for c in self.nodes.values() if c.health_check()]
 
-    def get_best_node(self, prefer_large_model: bool = False) -> Optional[RemoteNodeClient]:
-        """Pick the best available remote node."""
+    def get_best_node(self, prefer_large_model: bool = False, min_vram_mb: int = 0) -> Optional[RemoteNodeClient]:
+        """Pick the best available remote node.
+        
+        For large model tasks, prefer nodes with the most VRAM.
+        For general tasks, prefer lowest latency.
+        """
         healthy = self.get_healthy_nodes()
         if not healthy:
             return None
-        # Sort by latency, prefer cloud tier for large models
+        
+        # Filter by minimum VRAM if specified
+        candidates = healthy
+        if min_vram_mb > 0:
+            candidates = [c for c in healthy if c.vram_mb >= min_vram_mb]
+            if not candidates:
+                # Fall back to any healthy node if none meet VRAM requirement
+                candidates = healthy
+        
+        # For large models: prefer most VRAM, then lowest latency
         if prefer_large_model:
-            cloud = [c for c in healthy if c.tier == "cloud"]
-            if cloud:
-                return min(cloud, key=lambda x: x.latency_ms)
-        return min(healthy, key=lambda x: x.latency_ms)
+            # Sort by VRAM desc, then latency asc
+            candidates.sort(key=lambda x: (-x.vram_mb, x.latency_ms))
+            return candidates[0] if candidates else None
+        
+        # Default: lowest latency
+        return min(candidates, key=lambda x: x.latency_ms)
 
     def health_summary(self) -> list:
         return [c.to_dict() for c in self.nodes.values()]

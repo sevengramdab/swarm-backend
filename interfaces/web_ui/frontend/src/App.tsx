@@ -11,6 +11,7 @@ import { SimpleSwarm } from '@/pages/SimpleSwarm'
 import { SwarmCoder } from '@/pages/SwarmCoder'
 import { Projects } from '@/pages/Projects'
 import { Mesh } from '@/pages/Mesh'
+import { Tools } from '@/pages/Tools'
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
           <Route path="/swarmcoder" element={<SwarmCoder />} />
           <Route path="/projects" element={<Projects />} />
           <Route path="/mesh" element={<Mesh />} />
+          <Route path="/tools" element={<Tools />} />
         </Routes>
       </Layout>
     </ToastContextProvider>

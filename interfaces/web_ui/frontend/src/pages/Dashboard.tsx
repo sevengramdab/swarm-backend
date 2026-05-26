@@ -142,6 +142,9 @@ function NodeRow({ node }: { node: NodeInfo }) {
       <div className="flex items-center gap-3 text-xs text-muted-foreground">
         <span className={cn('h-2 w-2 rounded-full', node.status === 'online' ? 'bg-green-500' : 'bg-red-500')} />
         <span>{node.latency_ms}ms</span>
+        {node.vram_total_mb && (
+          <span>{(node.vram_total_mb / 1024).toFixed(1)} GB</span>
+        )}
         <span>{node.models.length} models</span>
       </div>
     </div>

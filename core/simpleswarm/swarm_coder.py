@@ -597,7 +597,11 @@ class SwarmCoder:
     # ------------------------------------------------------------------
 
     def _try_route_remote(self, task_id: str, goal: str) -> Optional[CoderTask]:
-        """Check if this task should run on a remote node with a larger model."""
+        """Check if this task should run on a remote node with a larger model.
+        
+        Uses VRAM-aware routing: estimates VRAM needed based on task complexity
+        and routes to the node with the most available VRAM.
+        """
         try:
             from core.simpleswarm.remote_client import get_remote_pool
             pool = get_remote_pool()
@@ -610,14 +614,20 @@ class SwarmCoder:
             if complexity < 0.6:
                 return None  # Simple task — run locally
 
-            # Pick best remote node
-            best = healthy[0]  # Could be smarter: compare model sizes
+            # Estimate VRAM needed for this task
+            min_vram = self._estimate_vram_mb(goal)
+            
+            # Pick best remote node with VRAM awareness
+            best = pool.get_best_node(prefer_large_model=True, min_vram_mb=min_vram)
+            if not best:
+                best = healthy[0]  # Fallback to first healthy node
+            
             result = best.submit_task(goal)
             if result.get("success") and result.get("data", {}).get("task_id"):
                 remote_task_id = result["data"]["task_id"]
                 task = self.tasks[task_id]
                 task.status = "RUNNING"
-                task.result_summary = f"Routed to remote node {best.node_id} ({best.base_url}) — task {remote_task_id}"
+                task.result_summary = f"Routed to remote node {best.node_id} ({best.base_url}, {best.vram_mb}MB VRAM) — task {remote_task_id}"
 
                 # Start a background thread to poll the remote task
                 thread = Thread(target=self._poll_remote_task, args=(task_id, best, remote_task_id), daemon=True)
@@ -626,6 +636,24 @@ class SwarmCoder:
         except Exception:
             pass
         return None
+
+    def _estimate_vram_mb(self, goal: str) -> int:
+        """Estimate VRAM needed for a task based on goal keywords."""
+        g = goal.lower()
+        # Base VRAM for simple tasks
+        vram = 2048
+        # Large models need more VRAM
+        if any(k in g for k in ["70b", "65b", "mixtral", "dolphin-mixtral"]):
+            vram = 45000
+        elif any(k in g for k in ["46b", "40b", "33b", "30b"]):
+            vram = 24000
+        elif any(k in g for k in ["13b", "14b", "solar"]):
+            vram = 10000
+        elif any(k in g for k in ["machine learning", "ai model", "train", "neural", "fine-tune"]):
+            vram = 16000
+        elif any(k in g for k in ["multiple files", "multi-file", "architecture", "framework", "database"]):
+            vram = 8192
+        return vram
 
     def _score_complexity(self, goal: str) -> float:
         """Score task complexity 0.0-1.0. Higher = more complex."""

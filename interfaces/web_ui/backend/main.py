@@ -65,6 +65,38 @@ async def lifespan(app: FastAPI):
             TierConfig(name="cloud_rtx5090", display_name="Poland RTX 5090", nodes=["poland-01"], models=["gpt-4"], health_status=HealthStatus.HEALTHY)
         )
 
+    # Auto-register nodes from config.yaml into the RemoteNodePool for SwarmCoder routing.
+    try:
+        from core.simpleswarm.remote_client import get_remote_pool
+        import yaml
+        config_path = Path(__file__).parent.parent.parent.parent / "config.yaml"
+        if config_path.exists():
+            with open(config_path, "r") as f:
+                cfg = yaml.safe_load(f)
+            nodes_cfg = cfg.get("nodes", {})
+            pool = get_remote_pool()
+            for node_id, node_data in nodes_cfg.items():
+                if node_data.get("status") != "active":
+                    continue
+                ip = node_data.get("ip", "")
+                if not ip or ip.startswith("127.") or ip == "localhost":
+                    continue  # Skip local node
+                endpoint = f"http://{ip}:8000"
+                vram = node_data.get("vram_mb", 0)
+                gpu = node_data.get("gpu_type", "unknown")
+                name = node_data.get("hostname", node_id)
+                client = pool.register(
+                    node_id=node_id,
+                    base_url=endpoint,
+                    name=f"{name} ({gpu}, {vram}MB)",
+                    tier="shadow" if "shadow" in node_id else "cloud",
+                    vram_mb=vram,
+                )
+                healthy = client.health_check()
+                print(f"[mesh] Auto-registered {node_id} @ {endpoint} — VRAM: {vram}MB — {'healthy' if healthy else 'unreachable'}")
+    except Exception as e:
+        print(f"[mesh] Auto-registration from config.yaml failed: {e}")
+
     main_breaker = MainBreaker(
         tier_manager=tier_manager,
         load_balancer=LoadBalancer(),

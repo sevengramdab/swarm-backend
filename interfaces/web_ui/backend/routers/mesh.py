@@ -22,6 +22,7 @@ class RegisterNodeRequest(BaseModel):
     endpoint: str  # e.g. "http://192.168.1.50:8000"
     tier: str = "shadow"
     models: List[str] = []
+    vram_mb: int = 0
 
 
 class NodeInfo(BaseModel):
@@ -30,6 +31,7 @@ class NodeInfo(BaseModel):
     endpoint: str
     tier: str
     models: List[str]
+    vram_mb: int
     status: str
     latency_ms: float
     last_seen: float
@@ -43,12 +45,24 @@ async def mesh_topology():
     for client in pool.nodes.values():
         client.health_check()
 
+    # Probe local Ollama for models
+    local_models = []
+    try:
+        import httpx
+        async with httpx.AsyncClient() as client:
+            r = await client.get("http://localhost:11434/api/tags", timeout=5)
+            if r.status_code == 200:
+                local_models = [m.get('name', '') for m in r.json().get('models', [])]
+    except Exception:
+        pass
+
     local = {
         "node_id": "local",
         "name": "Local Node",
         "endpoint": "http://localhost:8000",
         "tier": "local",
-        "models": [],
+        "models": local_models,
+        "vram_mb": 4096,  # Local MSI GTX 1650
         "routing_mode": "auto",
         "local_task_count": pool.local_task_count,
         "remote_task_count": pool.remote_task_count,
@@ -62,7 +76,7 @@ async def mesh_topology():
 async def register_node(req: RegisterNodeRequest):
     """Register a remote SimplePod node."""
     pool = get_remote_pool()
-    client = pool.register(req.node_id, req.endpoint, name=req.name or req.node_id, tier=req.tier)
+    client = pool.register(req.node_id, req.endpoint, name=req.name or req.node_id, tier=req.tier, vram_mb=req.vram_mb)
     healthy = client.health_check()
     return {
         "success": True,

@@ -27,6 +27,7 @@ interface MeshNode {
   latency_ms: number
   last_seen: number
   models: string[]
+  vram_mb: number
 }
 
 interface LocalNodeInfo {
@@ -35,6 +36,7 @@ interface LocalNodeInfo {
   endpoint: string
   tier: string
   models: string[]
+  vram_mb: number
   routing_mode: string
   local_task_count: number
   remote_task_count: number
@@ -84,7 +86,7 @@ export function Mesh() {
   const discover = useDiscoverNodes()
   const register = useRegisterNode()
   const remove = useRemoveNode()
-  const [form, setForm] = useState({ node_id: '', name: '', endpoint: '', tier: 'shadow' })
+  const [form, setForm] = useState({ node_id: '', name: '', endpoint: '', tier: 'shadow', vram_mb: 0 })
 
   const local = data?.local
   const nodes = data?.nodes ?? []
@@ -101,7 +103,7 @@ export function Mesh() {
     register.mutate(form, {
       onSuccess: () => {
         toast({ title: 'Node registered' })
-        setForm({ node_id: '', name: '', endpoint: '', tier: 'shadow' })
+        setForm({ node_id: '', name: '', endpoint: '', tier: 'shadow', vram_mb: 0 })
       },
       onError: () => toast({ title: 'Registration failed', variant: 'destructive' }),
     })
@@ -155,6 +157,10 @@ export function Mesh() {
                 <span className="font-medium text-foreground">Models:</span>{' '}
                 {local.models.join(', ') || '—'}
               </div>
+              <div>
+                <span className="font-medium text-foreground">VRAM:</span>{' '}
+                {local.vram_mb ? `${(local.vram_mb / 1024).toFixed(1)} GB` : '—'}
+              </div>
             </div>
             <div className="flex gap-4 pt-1">
               <div className="flex items-center gap-2 text-sm">
@@ -194,6 +200,7 @@ export function Mesh() {
                     <th className="pb-2 pr-4">Tier</th>
                     <th className="pb-2 pr-4">Status</th>
                     <th className="pb-2 pr-4">Latency</th>
+                    <th className="pb-2 pr-4">VRAM</th>
                     <th className="pb-2 pr-4">Models</th>
                     <th className="pb-2"></th>
                   </tr>
@@ -214,6 +221,9 @@ export function Mesh() {
                           <Activity className={cn('h-3 w-3', node.latency_ms < 50 ? 'text-green-500' : node.latency_ms < 150 ? 'text-yellow-500' : 'text-red-500')} />
                           {node.latency_ms}ms
                         </div>
+                      </td>
+                      <td className="py-2 pr-4 text-muted-foreground">
+                        {node.vram_mb ? `${(node.vram_mb / 1024).toFixed(1)} GB` : '—'}
                       </td>
                       <td className="py-2 pr-4">
                         <div className="flex flex-wrap gap-1">
@@ -257,6 +267,12 @@ export function Mesh() {
               <option value="shadow">Shadow</option>
               <option value="cloud">Cloud</option>
             </select>
+            <Input
+              type="number"
+              placeholder="VRAM (MB)"
+              value={form.vram_mb || ''}
+              onChange={(e) => setForm({ ...form, vram_mb: parseInt(e.target.value) || 0 })}
+            />
             <Button onClick={handleRegister} disabled={register.isPending || !form.node_id || !form.endpoint}>
               <Plus className="mr-2 h-4 w-4" />
               Register
