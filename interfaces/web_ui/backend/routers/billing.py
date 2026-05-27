@@ -5,7 +5,7 @@ Monetization engine for SimplePod Swarm.
 
 Business model:
 - Users post tasks with $ bounties
-- Node operators earn for completed tasks  
+- Node operators earn for completed tasks
 - SimplePod takes 15% platform fee
 - Automatic pricing based on GPU + complexity
 """
@@ -15,7 +15,19 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, HTTPException
 
+from .billing_db import (
+    init_db, get_account, update_account,
+    create_task as db_create_task, get_task as db_get_task,
+    list_tasks as db_list_tasks, claim_task as db_claim_task,
+    complete_task as db_complete_task, cancel_task as db_cancel_task,
+    set_swarmcoder_task_id, add_transaction, list_transactions,
+    get_platform_stats, get_leaderboard,
+)
+
 router = APIRouter(prefix="/billing", tags=["billing"])
+
+# Initialize DB on module load
+init_db()
 
 # ---------------------------------------------------------------------------
 # Pricing Engine
@@ -72,29 +84,6 @@ def calculate_task_price(vram_mb: int, gpu_type: str = "unknown", complexity: st
 
 
 # ---------------------------------------------------------------------------
-# In-Memory Data Stores (replace with DB in production)
-# ---------------------------------------------------------------------------
-_accounts: Dict[str, dict] = {}
-_marketplace_tasks: Dict[str, dict] = {}
-_transactions: List[dict] = []
-_platform_revenue = 0.0
-
-
-def _get_account(user_id: str) -> dict:
-    if user_id not in _accounts:
-        _accounts[user_id] = {
-            "user_id": user_id,
-            "credits": 25.0,  # Free starter credits
-            "total_spent": 0.0,
-            "total_earned": 0.0,
-            "tasks_posted": 0,
-            "tasks_completed": 0,
-            "created_at": time.time(),
-        }
-    return _accounts[user_id]
-
-
-# ---------------------------------------------------------------------------
 # Pydantic Models
 # ---------------------------------------------------------------------------
 class AccountResponse(BaseModel):
@@ -145,42 +134,49 @@ class CompleteTaskRequest(BaseModel):
 # Account Management
 # ---------------------------------------------------------------------------
 @router.get("/account/{user_id}", response_model=AccountResponse)
-def get_account(user_id: str):
-    return _get_account(user_id)
+def get_account_endpoint(user_id: str):
+    acct = get_account(user_id)
+    if acct is None:
+        raise HTTPException(status_code=404, detail="Account not found")
+    return acct
 
 
 @router.post("/account/{user_id}/deposit")
 def deposit(user_id: str, req: DepositRequest):
     """Add credits (mock — wire up Stripe in production)."""
-    acct = _get_account(user_id)
-    acct["credits"] += req.amount
-    _transactions.append({
-        "tx_id": str(uuid.uuid4()),
-        "type": "deposit",
-        "user_id": user_id,
-        "amount": req.amount,
-        "method": req.payment_method,
-        "timestamp": time.time(),
-    })
-    return {"success": True, "new_balance": acct["credits"], "tx_id": _transactions[-1]["tx_id"]}
+    acct = get_account(user_id)
+    if acct is None:
+        raise HTTPException(status_code=404, detail="Account not found")
+    new_credits = acct["credits"] + req.amount
+    update_account(user_id, credits=new_credits)
+    tx = add_transaction(
+        tx_id=str(uuid.uuid4()),
+        tx_type="deposit",
+        user_id=user_id,
+        amount=req.amount,
+        method=req.payment_method,
+    )
+    return {"success": True, "new_balance": new_credits, "tx_id": tx["tx_id"]}
 
 
 @router.post("/account/{user_id}/withdraw")
 def withdraw(user_id: str, req: WithdrawRequest):
     """Cash out earnings (mock — wire up Stripe Connect in production)."""
-    acct = _get_account(user_id)
+    acct = get_account(user_id)
+    if acct is None:
+        raise HTTPException(status_code=404, detail="Account not found")
     if acct["total_earned"] < req.amount:
         raise HTTPException(status_code=400, detail="Insufficient earnings")
-    acct["total_earned"] -= req.amount
-    _transactions.append({
-        "tx_id": str(uuid.uuid4()),
-        "type": "withdrawal",
-        "user_id": user_id,
-        "amount": -req.amount,
-        "method": req.destination,
-        "timestamp": time.time(),
-    })
-    return {"success": True, "remaining_earnings": acct["total_earned"], "tx_id": _transactions[-1]["tx_id"]}
+    new_earned = acct["total_earned"] - req.amount
+    update_account(user_id, total_earned=new_earned)
+    tx = add_transaction(
+        tx_id=str(uuid.uuid4()),
+        tx_type="withdrawal",
+        user_id=user_id,
+        amount=-req.amount,
+        method=req.destination,
+    )
+    return {"success": True, "remaining_earnings": new_earned, "tx_id": tx["tx_id"]}
 
 
 # ---------------------------------------------------------------------------
@@ -216,75 +212,89 @@ def pricing_table():
 @router.post("/marketplace/post")
 def post_bounty(req: BountyTaskRequest):
     """Post a task with a dollar bounty. Credits are held in escrow."""
-    acct = _get_account(req.user_id)
+    acct = get_account(req.user_id)
+    if acct is None:
+        raise HTTPException(status_code=404, detail="Account not found")
     if acct["credits"] < req.bounty:
-        raise HTTPException(status_code=402, detail=f"Insufficient credits. Balance: ${acct['credits']:.2f}, Required: ${req.bounty:.2f}")
+        raise HTTPException(
+            status_code=402,
+            detail=f"Insufficient credits. Balance: ${acct['credits']:.2f}, Required: ${req.bounty:.2f}"
+        )
 
     # Deduct from balance (escrow)
-    acct["credits"] -= req.bounty
-    acct["total_spent"] += req.bounty
-    acct["tasks_posted"] += 1
+    new_credits = acct["credits"] - req.bounty
+    new_spent = acct["total_spent"] + req.bounty
+    new_posted = acct["tasks_posted"] + 1
+    update_account(req.user_id, credits=new_credits, total_spent=new_spent, tasks_posted=new_posted)
 
     task_id = str(uuid.uuid4())
-    task = {
-        "task_id": task_id,
-        "user_id": req.user_id,
-        "goal": req.goal,
-        "bounty": req.bounty,
-        "gpu_preference": req.gpu_preference,
-        "complexity": req.complexity,
-        "status": "open",  # open | claimed | completed | cancelled
-        "claimed_by": None,
-        "claimed_at": None,
-        "completed_at": None,
-        "result_summary": None,
-        "created_at": time.time(),
-    }
-    _marketplace_tasks[task_id] = task
-    _transactions.append({
-        "tx_id": str(uuid.uuid4()),
-        "type": "escrow_hold",
-        "user_id": req.user_id,
-        "task_id": task_id,
-        "amount": -req.bounty,
-        "timestamp": time.time(),
-    })
-    return {"success": True, "task": task, "remaining_credits": acct["credits"]}
+    task = db_create_task(
+        task_id=task_id,
+        user_id=req.user_id,
+        goal=req.goal,
+        bounty=req.bounty,
+        complexity=req.complexity,
+        gpu_preference=req.gpu_preference,
+    )
+    add_transaction(
+        tx_id=str(uuid.uuid4()),
+        tx_type="escrow_hold",
+        user_id=req.user_id,
+        task_id=task_id,
+        amount=-req.bounty,
+    )
+    return {"success": True, "task": task, "remaining_credits": new_credits}
 
 
 @router.get("/marketplace/tasks")
 def list_marketplace(status: Optional[str] = None):
     """List open bounties."""
-    tasks = list(_marketplace_tasks.values())
-    if status:
-        tasks = [t for t in tasks if t["status"] == status]
-    return {"tasks": sorted(tasks, key=lambda x: -x["bounty"])}
+    tasks = db_list_tasks(status=status)
+    return {"tasks": tasks}
+
+
+@router.get("/marketplace/task/{task_id}")
+def get_marketplace_task(task_id: str):
+    task = db_get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
 
 
 @router.post("/marketplace/{task_id}/claim")
 def claim_task(task_id: str, req: ClaimTaskRequest):
     """A node claims an open bounty."""
-    if task_id not in _marketplace_tasks:
+    task = db_get_task(task_id)
+    if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    task = _marketplace_tasks[task_id]
     if task["status"] != "open":
         raise HTTPException(status_code=400, detail=f"Task already {task['status']}")
 
-    task["status"] = "claimed"
-    task["claimed_by"] = req.node_id
-    task["claimed_by_name"] = req.node_name
-    task["claimed_at"] = time.time()
-    return {"success": True, "task": task}
+    updated = db_claim_task(task_id, req.node_id, req.node_name)
+    if updated is None or updated["status"] != "claimed":
+        raise HTTPException(status_code=400, detail="Failed to claim task")
+
+    # Auto-submit to SwarmCoder for execution
+    try:
+        from core.simpleswarm.swarm_coder import SwarmCoder
+        workspace = f"marketplace_tasks/{task_id}"
+        import os
+        os.makedirs(workspace, exist_ok=True)
+        coder = SwarmCoder(project_dir=workspace)
+        sc_task = coder.submit_task(task["goal"])
+        set_swarmcoder_task_id(task_id, sc_task.task_id)
+    except Exception as e:
+        print(f"[billing] SwarmCoder auto-submit failed for {task_id}: {e}")
+
+    return {"success": True, "task": updated}
 
 
 @router.post("/marketplace/{task_id}/complete")
 def complete_task(task_id: str, req: CompleteTaskRequest):
     """Mark task complete — release bounty to node minus platform fee."""
-    global _platform_revenue
-
-    if task_id not in _marketplace_tasks:
+    task = db_get_task(task_id)
+    if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    task = _marketplace_tasks[task_id]
     if task["status"] != "claimed":
         raise HTTPException(status_code=400, detail="Task not claimed")
 
@@ -293,33 +303,31 @@ def complete_task(task_id: str, req: CompleteTaskRequest):
     node_payout = round(bounty - fee, 2)
 
     # Pay the node operator
-    node_acct = _get_account(task["claimed_by"])
-    node_acct["total_earned"] += node_payout
-    node_acct["tasks_completed"] += 1
-    node_acct["credits"] += node_payout  # earnings go to credit balance
+    node_acct = get_account(task["claimed_by"])
+    if node_acct:
+        new_earned = node_acct["total_earned"] + node_payout
+        new_credits = node_acct["credits"] + node_payout
+        new_completed = node_acct["tasks_completed"] + 1
+        update_account(
+            task["claimed_by"],
+            total_earned=new_earned,
+            credits=new_credits,
+            tasks_completed=new_completed,
+        )
 
-    # Track platform revenue
-    _platform_revenue += fee
-
-    task["status"] = "completed"
-    task["completed_at"] = time.time()
-    task["result_summary"] = req.result_summary
-    task["node_payout"] = node_payout
-    task["platform_fee"] = fee
-
-    _transactions.append({
-        "tx_id": str(uuid.uuid4()),
-        "type": "payout",
-        "user_id": task["claimed_by"],
-        "task_id": task_id,
-        "amount": node_payout,
-        "fee": fee,
-        "timestamp": time.time(),
-    })
+    updated = db_complete_task(task_id, req.result_summary, node_payout, fee)
+    add_transaction(
+        tx_id=str(uuid.uuid4()),
+        tx_type="payout",
+        user_id=task["claimed_by"],
+        task_id=task_id,
+        amount=node_payout,
+        fee=fee,
+    )
 
     return {
         "success": True,
-        "task": task,
+        "task": updated,
         "node_payout": node_payout,
         "platform_fee": fee,
     }
@@ -328,30 +336,31 @@ def complete_task(task_id: str, req: CompleteTaskRequest):
 @router.post("/marketplace/{task_id}/cancel")
 def cancel_task(task_id: str, user_id: str):
     """Cancel an open task — refund bounty to poster."""
-    if task_id not in _marketplace_tasks:
+    task = db_get_task(task_id)
+    if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    task = _marketplace_tasks[task_id]
     if task["status"] != "open":
         raise HTTPException(status_code=400, detail="Can only cancel open tasks")
     if task["user_id"] != user_id:
         raise HTTPException(status_code=403, detail="Not your task")
 
     # Refund
-    acct = _get_account(user_id)
-    acct["credits"] += task["bounty"]
-    acct["total_spent"] -= task["bounty"]
-    acct["tasks_posted"] -= 1
+    acct = get_account(user_id)
+    if acct:
+        new_credits = acct["credits"] + task["bounty"]
+        new_spent = acct["total_spent"] - task["bounty"]
+        new_posted = acct["tasks_posted"] - 1
+        update_account(user_id, credits=new_credits, total_spent=new_spent, tasks_posted=new_posted)
 
-    task["status"] = "cancelled"
-    _transactions.append({
-        "tx_id": str(uuid.uuid4()),
-        "type": "refund",
-        "user_id": user_id,
-        "task_id": task_id,
-        "amount": task["bounty"],
-        "timestamp": time.time(),
-    })
-    return {"success": True, "refund": task["bounty"], "task": task}
+    updated = db_cancel_task(task_id, user_id)
+    add_transaction(
+        tx_id=str(uuid.uuid4()),
+        tx_type="refund",
+        user_id=user_id,
+        task_id=task_id,
+        amount=task["bounty"],
+    )
+    return {"success": True, "refund": task["bounty"], "task": updated}
 
 
 # ---------------------------------------------------------------------------
@@ -360,9 +369,11 @@ def cancel_task(task_id: str, user_id: str):
 @router.get("/earnings/{user_id}")
 def get_earnings(user_id: str):
     """Get earnings breakdown for a user/node."""
-    acct = _get_account(user_id)
-    completed_tasks = [t for t in _marketplace_tasks.values()
-                       if t.get("claimed_by") == user_id and t["status"] == "completed"]
+    acct = get_account(user_id)
+    if acct is None:
+        raise HTTPException(status_code=404, detail="Account not found")
+    completed_tasks = db_list_tasks(status=None)
+    completed_tasks = [t for t in completed_tasks if t.get("claimed_by") == user_id and t["status"] == "completed"]
     return {
         "user_id": user_id,
         "total_earned": acct["total_earned"],
@@ -377,35 +388,17 @@ def get_earnings(user_id: str):
 @router.get("/platform/revenue")
 def platform_revenue():
     """Platform-wide revenue stats."""
-    all_tasks = list(_marketplace_tasks.values())
-    completed = [t for t in all_tasks if t["status"] == "completed"]
-    open_bounties = [t for t in all_tasks if t["status"] == "open"]
-    total_bounty_volume = sum(t["bounty"] for t in all_tasks)
-    total_paid_out = sum(t.get("node_payout", 0) for t in completed)
-
-    return {
-        "platform_revenue": round(_platform_revenue, 2),
-        "total_tasks": len(all_tasks),
-        "completed_tasks": len(completed),
-        "open_bounties": len(open_bounties),
-        "total_bounty_volume": round(total_bounty_volume, 2),
-        "total_paid_to_nodes": round(total_paid_out, 2),
-        "platform_fee_pct": PLATFORM_FEE_PCT * 100,
-        "recent_transactions": _transactions[-20:][::-1],
-    }
+    return get_platform_stats()
 
 
 @router.get("/leaderboard")
 def leaderboard():
     """Top earners in the swarm."""
-    users = sorted(_accounts.values(), key=lambda x: -x["total_earned"])
-    return {
-        "top_earners": [
-            {
-                "user_id": u["user_id"],
-                "total_earned": u["total_earned"],
-                "tasks_completed": u["tasks_completed"],
-            }
-            for u in users[:10]
-        ]
-    }
+    return {"top_earners": get_leaderboard()}
+
+
+@router.get("/transactions/{user_id}")
+def user_transactions(user_id: str, limit: int = 50):
+    """Get transaction history for a user."""
+    txs = list_transactions(user_id=user_id, limit=limit)
+    return {"transactions": txs}
