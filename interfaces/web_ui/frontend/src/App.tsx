@@ -13,6 +13,8 @@ import { Projects } from '@/pages/Projects'
 import { Mesh } from '@/pages/Mesh'
 import { Tools } from '@/pages/Tools'
 import { MeshRemote } from '@/pages/MeshRemote'
+import { Marketplace } from '@/pages/Marketplace'
+import { Earnings } from '@/pages/Earnings'
 
 export default function App() {
   return (
@@ -31,6 +33,8 @@ export default function App() {
           <Route path="/mesh" element={<Mesh />} />
           <Route path="/tools" element={<Tools />} />
           <Route path="/mesh-remote" element={<MeshRemote />} />
+          <Route path="/marketplace" element={<Marketplace />} />
+          <Route path="/earnings" element={<Earnings />} />
         </Routes>
       </Layout>
     </ToastContextProvider>
