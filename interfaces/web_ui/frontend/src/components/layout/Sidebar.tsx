@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { LayoutDashboard, MessageSquare, Boxes, Server, Settings, PanelLeft, PanelLeftOpen, Zap, Bot, FileCode, Rocket, Globe, Wrench, Gamepad2, Store, Banknote, ListChecks, Bell } from 'lucide-react'
+import { LayoutDashboard, MessageSquare, Boxes, Server, Settings, PanelLeft, PanelLeftOpen, Zap, Bot, FileCode, Rocket, Globe, Wrench, Gamepad2, Store, Banknote, ListChecks, Bell, CreditCard } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
@@ -20,6 +20,7 @@ const navItems = [
   { name: 'Earnings', path: '/earnings', icon: Banknote },
   { name: 'My Tasks', path: '/my-tasks', icon: ListChecks },
   { name: 'Webhooks', path: '/webhooks', icon: Bell },
+  { name: 'Payments', path: '/payments', icon: CreditCard },
   { name: 'Settings', path: '/settings', icon: Settings },
 ]
 
