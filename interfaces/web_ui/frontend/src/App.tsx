@@ -18,6 +18,7 @@ import { Earnings } from '@/pages/Earnings'
 import { MyTasks } from '@/pages/MyTasks'
 import { Webhooks } from '@/pages/Webhooks'
 import { StripePayments } from '@/pages/StripePayments'
+import { NodeDashboard } from '@/pages/NodeDashboard'
 
 export default function App() {
   return (
@@ -41,6 +42,7 @@ export default function App() {
           <Route path="/my-tasks" element={<MyTasks />} />
           <Route path="/webhooks" element={<Webhooks />} />
           <Route path="/payments" element={<StripePayments />} />
+          <Route path="/node-dashboard" element={<NodeDashboard />} />
         </Routes>
       </Layout>
     </ToastContextProvider>
