@@ -160,6 +160,45 @@ def claim_task(task_id: str, node_id: str, node_name: str) -> Optional[Dict[str,
         return get_task(task_id)
 
 
+def submit_for_review(task_id: str, result_summary: str) -> Optional[Dict[str, Any]]:
+    with _get_db() as conn:
+        conn.execute(
+            """UPDATE marketplace_tasks
+               SET status = 'pending_review', result_summary = ?
+               WHERE task_id = ? AND status = 'claimed'""",
+            (result_summary, task_id)
+        )
+        conn.commit()
+        return get_task(task_id)
+
+
+def approve_task(task_id: str, node_payout: float, platform_fee: float) -> Optional[Dict[str, Any]]:
+    import time
+    with _get_db() as conn:
+        conn.execute(
+            """UPDATE marketplace_tasks
+               SET status = 'completed', completed_at = ?,
+                   node_payout = ?, platform_fee = ?
+               WHERE task_id = ? AND status = 'pending_review'""",
+            (time.time(), node_payout, platform_fee, task_id)
+        )
+        conn.commit()
+        return get_task(task_id)
+
+
+def reject_task(task_id: str) -> Optional[Dict[str, Any]]:
+    with _get_db() as conn:
+        conn.execute(
+            """UPDATE marketplace_tasks
+               SET status = 'open', claimed_by = NULL, claimed_by_name = NULL,
+                   claimed_at = NULL, result_summary = NULL, swarmcoder_task_id = NULL
+               WHERE task_id = ? AND status = 'pending_review'""",
+            (task_id,)
+        )
+        conn.commit()
+        return get_task(task_id)
+
+
 def complete_task(task_id: str, result_summary: str, node_payout: float, platform_fee: float) -> Optional[Dict[str, Any]]:
     import time
     with _get_db() as conn:

@@ -20,6 +20,8 @@ from .billing_db import (
     create_task as db_create_task, get_task as db_get_task,
     list_tasks as db_list_tasks, claim_task as db_claim_task,
     complete_task as db_complete_task, cancel_task as db_cancel_task,
+    submit_for_review as db_submit_for_review,
+    approve_task as db_approve_task, reject_task as db_reject_task,
     set_swarmcoder_task_id, add_transaction, list_transactions,
     get_platform_stats, get_leaderboard,
 )
@@ -289,9 +291,91 @@ def claim_task(task_id: str, req: ClaimTaskRequest):
     return {"success": True, "task": updated}
 
 
+class SubmitReviewRequest(BaseModel):
+    result_summary: str = ""
+
+
+class ReviewDecisionRequest(BaseModel):
+    user_id: str
+
+
+@router.post("/marketplace/{task_id}/submit-review")
+def submit_for_review(task_id: str, req: SubmitReviewRequest):
+    """Node submits completed work for poster review."""
+    task = db_get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task["status"] != "claimed":
+        raise HTTPException(status_code=400, detail="Task not claimed")
+
+    updated = db_submit_for_review(task_id, req.result_summary)
+    return {"success": True, "task": updated, "message": "Work submitted for review. Poster must approve before payout."}
+
+
+@router.post("/marketplace/{task_id}/approve")
+def approve_task(task_id: str, req: ReviewDecisionRequest):
+    """Poster approves work — releases bounty to node minus platform fee."""
+    task = db_get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task["status"] != "pending_review":
+        raise HTTPException(status_code=400, detail="Task not pending review")
+    if task["user_id"] != req.user_id:
+        raise HTTPException(status_code=403, detail="Only the task poster can approve")
+
+    bounty = task["bounty"]
+    fee = round(bounty * PLATFORM_FEE_PCT, 2)
+    node_payout = round(bounty - fee, 2)
+
+    # Pay the node operator
+    node_acct = get_account(task["claimed_by"])
+    if node_acct:
+        new_earned = node_acct["total_earned"] + node_payout
+        new_credits = node_acct["credits"] + node_payout
+        new_completed = node_acct["tasks_completed"] + 1
+        update_account(
+            task["claimed_by"],
+            total_earned=new_earned,
+            credits=new_credits,
+            tasks_completed=new_completed,
+        )
+
+    updated = db_approve_task(task_id, node_payout, fee)
+    add_transaction(
+        tx_id=str(uuid.uuid4()),
+        tx_type="payout",
+        user_id=task["claimed_by"],
+        task_id=task_id,
+        amount=node_payout,
+        fee=fee,
+    )
+
+    return {
+        "success": True,
+        "task": updated,
+        "node_payout": node_payout,
+        "platform_fee": fee,
+    }
+
+
+@router.post("/marketplace/{task_id}/reject")
+def reject_task(task_id: str, req: ReviewDecisionRequest):
+    """Poster rejects work — task goes back to open for another node."""
+    task = db_get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task["status"] != "pending_review":
+        raise HTTPException(status_code=400, detail="Task not pending review")
+    if task["user_id"] != req.user_id:
+        raise HTTPException(status_code=403, detail="Only the task poster can reject")
+
+    updated = db_reject_task(task_id)
+    return {"success": True, "task": updated, "message": "Work rejected. Task is back open for claiming."}
+
+
 @router.post("/marketplace/{task_id}/complete")
 def complete_task(task_id: str, req: CompleteTaskRequest):
-    """Mark task complete — release bounty to node minus platform fee."""
+    """Legacy: Mark task complete directly (admin/auto-approve)."""
     task = db_get_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")

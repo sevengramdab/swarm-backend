@@ -3,7 +3,8 @@ import { useToast } from '@/components/ui/toaster'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ListChecks, ClipboardList, Clock, CheckCircle2, XCircle, Loader2, Cpu } from 'lucide-react'
+import { Textarea } from '@/components/ui/textarea'
+import { ListChecks, ClipboardList, Clock, CheckCircle2, XCircle, Loader2, Cpu, Eye, ThumbsUp, ThumbsDown, Send } from 'lucide-react'
 
 const API = 'http://localhost:8000/billing'
 const USER_ID = 'user_001'
@@ -30,6 +31,7 @@ export function MyTasks() {
   const [posted, setPosted] = useState<Task[]>([])
   const [claimed, setClaimed] = useState<Task[]>([])
   const [loading, setLoading] = useState(false)
+  const [reviewText, setReviewText] = useState<Record<string, string>>({})
 
   const fetchTasks = async () => {
     setLoading(true)
@@ -64,16 +66,51 @@ export function MyTasks() {
     }
   }
 
-  const completeTask = async (taskId: string) => {
+  const submitForReview = async (taskId: string) => {
+    const summary = reviewText[taskId] || 'Task completed. Review the generated files in the workspace.'
     try {
-      const res = await fetch(`${API}/marketplace/${taskId}/complete`, {
+      const res = await fetch(`${API}/marketplace/${taskId}/submit-review`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ result_summary: 'Task completed successfully via swarm execution.' }),
+        body: JSON.stringify({ result_summary: summary }),
       })
       const data = await res.json()
       if (data.success) {
-        toast({ title: 'Task Completed!', description: `Payout: $${data.node_payout} | Fee: $${data.platform_fee}` })
+        toast({ title: 'Submitted for Review', description: 'Poster must approve before payout.' })
+        fetchTasks()
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    }
+  }
+
+  const approveTask = async (taskId: string) => {
+    try {
+      const res = await fetch(`${API}/marketplace/${taskId}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: USER_ID }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast({ title: 'Approved!', description: `Node paid $${data.node_payout} | Platform fee: $${data.platform_fee}` })
+        fetchTasks()
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    }
+  }
+
+  const rejectTask = async (taskId: string) => {
+    try {
+      const res = await fetch(`${API}/marketplace/${taskId}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: USER_ID }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast({ title: 'Rejected', description: 'Task is back open for another node.' })
         fetchTasks()
       }
     } catch (e: any) {
@@ -84,6 +121,7 @@ export function MyTasks() {
   const statusConfig: Record<string, { icon: any; color: string; label: string }> = {
     open: { icon: Clock, color: 'bg-blue-500/20 text-blue-400', label: 'Open' },
     claimed: { icon: Loader2, color: 'bg-yellow-500/20 text-yellow-400', label: 'In Progress' },
+    pending_review: { icon: Eye, color: 'bg-orange-500/20 text-orange-400', label: 'Pending Review' },
     completed: { icon: CheckCircle2, color: 'bg-green-500/20 text-green-400', label: 'Completed' },
     cancelled: { icon: XCircle, color: 'bg-red-500/20 text-red-400', label: 'Cancelled' },
   }
@@ -107,23 +145,49 @@ export function MyTasks() {
               <p className="text-sm font-medium leading-relaxed">{task.goal}</p>
               {task.claimed_by_name && (
                 <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                  <Cpu className="h-3 w-3" /> Claimed by: {task.claimed_by_name}
+                  <Cpu className="h-3 w-3" /> {isPosted ? `Claimed by: ${task.claimed_by_name}` : `Posted by: ${task.user_id}`}
                 </p>
               )}
               {task.result_summary && (
-                <p className="text-xs text-green-400 mt-1">Result: {task.result_summary}</p>
+                <div className="mt-2 rounded-md bg-muted p-2 text-xs">
+                  <p className="text-muted-foreground mb-1">Result:</p>
+                  <p className="text-foreground">{task.result_summary}</p>
+                </div>
               )}
             </div>
             <div className="flex flex-col items-end gap-2 shrink-0">
               <span className="text-xl font-bold text-green-400">${task.bounty.toFixed(2)}</span>
+
+              {/* Poster actions */}
               {isPosted && task.status === 'open' && (
                 <Button size="sm" variant="destructive" onClick={() => cancelTask(task.task_id)}>Cancel</Button>
               )}
-              {!isPosted && task.status === 'claimed' && (
-                <Button size="sm" onClick={() => completeTask(task.task_id)}>
-                  <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Complete
-                </Button>
+              {isPosted && task.status === 'pending_review' && (
+                <div className="flex gap-2">
+                  <Button size="sm" variant="default" onClick={() => approveTask(task.task_id)} className="gap-1">
+                    <ThumbsUp className="h-3.5 w-3.5" /> Approve
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => rejectTask(task.task_id)} className="gap-1">
+                    <ThumbsDown className="h-3.5 w-3.5" /> Reject
+                  </Button>
+                </div>
               )}
+
+              {/* Node actions */}
+              {!isPosted && task.status === 'claimed' && (
+                <div className="flex flex-col items-end gap-2">
+                  <Textarea
+                    placeholder="Describe what was completed..."
+                    className="w-48 h-16 text-xs"
+                    value={reviewText[task.task_id] || ''}
+                    onChange={(e) => setReviewText({ ...reviewText, [task.task_id]: e.target.value })}
+                  />
+                  <Button size="sm" onClick={() => submitForReview(task.task_id)} className="gap-1">
+                    <Send className="h-3.5 w-3.5" /> Submit for Review
+                  </Button>
+                </div>
+              )}
+
               {task.status === 'completed' && (
                 <div className="text-right text-xs">
                   <p className="text-green-400">+${task.node_payout?.toFixed(2)}</p>
@@ -141,7 +205,7 @@ export function MyTasks() {
     <div className="space-y-6 p-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">My Tasks</h1>
-        <p className="text-muted-foreground">Track every bounty you've posted and every task you've claimed.</p>
+        <p className="text-muted-foreground">Track bounties, submissions, and approvals.</p>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
