@@ -190,3 +190,41 @@ def check_quality(req: QualityCheckRequest):
 def quick_check(task_id: str):
     """Quick quality check for a task workspace."""
     return check_quality(QualityCheckRequest(task_id=task_id))
+
+
+@router.get("/files/{task_id}")
+def list_files(task_id: str):
+    """List all files in a task workspace."""
+    workspace = Path(f"marketplace_tasks/{task_id}")
+    if not workspace.exists():
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    files = []
+    for f in sorted(workspace.rglob("*")):
+        if f.is_file() and f.name != "__pycache__" and "__pycache__" not in str(f):
+            files.append({
+                "path": str(f.relative_to(workspace)).replace("\\", "/"),
+                "size": f.stat().st_size,
+            })
+    return {"task_id": task_id, "files": files}
+
+
+@router.get("/file/{task_id}")
+def get_file(task_id: str, path: str):
+    """Get contents of a specific file in a task workspace."""
+    workspace = Path(f"marketplace_tasks/{task_id}")
+    file_path = workspace / path.replace("../", "").replace("..\\", "")
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    # Security: ensure file is within workspace
+    try:
+        file_path.resolve().relative_to(workspace.resolve())
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    content = file_path.read_text(encoding="utf-8", errors="replace")
+    return {
+        "task_id": task_id,
+        "path": path,
+        "content": content,
+        "size": len(content),
+    }

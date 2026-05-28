@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { ListChecks, ClipboardList, Clock, CheckCircle2, XCircle, Loader2, Cpu, Eye, ThumbsUp, ThumbsDown, Send } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { ListChecks, ClipboardList, Clock, CheckCircle2, XCircle, Loader2, Cpu, Eye, ThumbsUp, ThumbsDown, Send, FileCode } from 'lucide-react'
 
 const API = 'http://localhost:8000/billing'
 const USER_ID = 'user_001'
@@ -32,6 +33,9 @@ export function MyTasks() {
   const [claimed, setClaimed] = useState<Task[]>([])
   const [loading, setLoading] = useState(false)
   const [reviewText, setReviewText] = useState<Record<string, string>>({})
+  const [codeFiles, setCodeFiles] = useState<Record<string, {path: string, size: number}[]>>({})
+  const [codeContent, setCodeContent] = useState<string>('')
+  const [codePath, setCodePath] = useState('')
 
   const fetchTasks = async () => {
     setLoading(true)
@@ -101,6 +105,27 @@ export function MyTasks() {
     }
   }
 
+  const loadCodeFiles = async (taskId: string) => {
+    try {
+      const res = await fetch(`http://localhost:8000/quality/files/${taskId}`)
+      const data = await res.json()
+      setCodeFiles(prev => ({ ...prev, [taskId]: data.files || [] }))
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const viewFile = async (taskId: string, path: string) => {
+    try {
+      const res = await fetch(`http://localhost:8000/quality/file/${taskId}?path=${encodeURIComponent(path)}`)
+      const data = await res.json()
+      setCodeContent(data.content)
+      setCodePath(path)
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
   const rejectTask = async (taskId: string) => {
     try {
       const res = await fetch(`${API}/marketplace/${taskId}/reject`, {
@@ -153,6 +178,38 @@ export function MyTasks() {
                   <p className="text-muted-foreground mb-1">Result:</p>
                   <p className="text-foreground">{task.result_summary}</p>
                 </div>
+              )}
+              {(task.status === 'pending_review' || task.status === 'completed') && (
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button size="sm" variant="outline" className="mt-2 gap-1 text-xs" onClick={() => loadCodeFiles(task.task_id)}>
+                      <FileCode className="h-3 w-3" /> View Generated Code
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-3xl max-h-[80vh]">
+                    <DialogHeader>
+                      <DialogTitle className="text-sm">Generated Files</DialogTitle>
+                    </DialogHeader>
+                    <div className="flex gap-4 h-[60vh]">
+                      <div className="w-48 shrink-0 space-y-1 overflow-y-auto">
+                        {(codeFiles[task.task_id] || []).map((f) => (
+                          <Button key={f.path} size="sm" variant="ghost" className="w-full justify-start text-xs h-7"
+                            onClick={() => viewFile(task.task_id, f.path)}>
+                            {f.path}
+                          </Button>
+                        ))}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        {codePath && (
+                          <div className="mb-2 text-xs text-muted-foreground">{codePath}</div>
+                        )}
+                        <pre className="h-full overflow-auto rounded-md bg-muted p-3 text-xs font-mono">
+                          <code>{codeContent}</code>
+                        </pre>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               )}
             </div>
             <div className="flex flex-col items-end gap-2 shrink-0">
