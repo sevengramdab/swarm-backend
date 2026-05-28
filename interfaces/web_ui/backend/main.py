@@ -25,7 +25,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .dependencies import init_dependencies
-from .routers import nodes, remote, routing, settings as settings_router, sitk, swarm, telemetry, orbstudio, screenshot, hardware, simpleswarm, swarm_coder, mesh, projects, mesh_remote, billing, notifications, stripe_integration
+from .routers import nodes, remote, routing, settings as settings_router, sitk, swarm, telemetry, orbstudio, screenshot, hardware, simpleswarm, swarm_coder, mesh, projects, mesh_remote, billing, notifications, stripe_integration, code_quality
 from .settings_store import get_settings as _get_settings
 
 
@@ -265,6 +265,7 @@ def create_app() -> FastAPI:
     app.include_router(billing.router)
     app.include_router(notifications.router)
     app.include_router(stripe_integration.router)
+    app.include_router(code_quality.router)
 
     # Serve the static dashboard (replaces broken Streamlit).
     static_dir = Path(__file__).parent.parent / "static"

@@ -311,9 +311,24 @@ def submit_for_review(task_id: str, req: SubmitReviewRequest):
     if task["status"] != "claimed":
         raise HTTPException(status_code=400, detail="Task not claimed")
 
+    # Auto-quality check before submission
+    quality = None
+    try:
+        from .code_quality import check_quality, QualityCheckRequest
+        quality = check_quality(QualityCheckRequest(task_id=task_id))
+    except Exception as e:
+        print(f"[billing] Quality check failed for {task_id}: {e}")
+
     updated = db_submit_for_review(task_id, req.result_summary)
     notify("submit_review", updated, {"result_summary": req.result_summary[:200]})
-    return {"success": True, "task": updated, "message": "Work submitted for review. Poster must approve before payout."}
+
+    response = {"success": True, "task": updated, "message": "Work submitted for review. Poster must approve before payout."}
+    if quality:
+        response["quality_score"] = quality.overall_score
+        response["quality_passed"] = quality.passed
+        response["quality_summary"] = quality.summary
+        response["quality_checks"] = quality.checks
+    return response
 
 
 @router.post("/marketplace/{task_id}/approve")
