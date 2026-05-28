@@ -25,6 +25,7 @@ from .billing_db import (
     set_swarmcoder_task_id, add_transaction, list_transactions,
     get_platform_stats, get_leaderboard,
 )
+from .notifications import notify
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
@@ -276,6 +277,8 @@ def claim_task(task_id: str, req: ClaimTaskRequest):
     if updated is None or updated["status"] != "claimed":
         raise HTTPException(status_code=400, detail="Failed to claim task")
 
+    notify("claimed", updated, {"node_name": req.node_name})
+
     # Auto-submit to SwarmCoder for execution
     try:
         from core.simpleswarm.swarm_coder import SwarmCoder
@@ -309,6 +312,7 @@ def submit_for_review(task_id: str, req: SubmitReviewRequest):
         raise HTTPException(status_code=400, detail="Task not claimed")
 
     updated = db_submit_for_review(task_id, req.result_summary)
+    notify("submit_review", updated, {"result_summary": req.result_summary[:200]})
     return {"success": True, "task": updated, "message": "Work submitted for review. Poster must approve before payout."}
 
 
@@ -349,6 +353,7 @@ def approve_task(task_id: str, req: ReviewDecisionRequest):
         amount=node_payout,
         fee=fee,
     )
+    notify("approved", updated, {"node_payout": node_payout, "platform_fee": fee})
 
     return {
         "success": True,
